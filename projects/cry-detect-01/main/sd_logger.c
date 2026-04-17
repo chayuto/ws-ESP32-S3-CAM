@@ -27,7 +27,7 @@
 static const char *TAG = "sdlog";
 
 #define RING_LINES       80
-#define RING_LINE_BYTES  120
+#define RING_LINE_BYTES  192
 #define RING_BYTES       (RING_LINES * RING_LINE_BYTES)
 
 static char *s_ring;
@@ -152,22 +152,30 @@ static int format_timestamp(char *buf, size_t max)
 }
 
 static void write_row_locked(const char *event, float cry_conf, int32_t latency_ms,
-                             const cry_metrics_t *m, float nf_p95)
+                             const cry_metrics_t *m, float nf_p95, bool nf_warm)
 {
     char ts[48];
     format_timestamp(ts, sizeof(ts));
     uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
 
     char line[RING_LINE_BYTES];
-    /* schema: wallclock,uptime_s,event,cry_conf,rms,nf_p95,latency_ms,free_heap,rssi,state */
+    /* schema (v2):
+     * wallclock,uptime_s,event,cry_conf,max_cry_conf_1s,rms,nf_p95,nf_warm,
+     * latency_ms,inference_count,inference_fps,free_heap,free_psram,rssi,state
+     */
     int n = snprintf(line, sizeof(line),
-        "%s,%u,%s,%.3f,%.1f,%.1f,%d,%u,%d,%d\n",
+        "%s,%u,%s,%.3f,%.3f,%.1f,%.1f,%d,%d,%u,%.2f,%u,%u,%d,%d\n",
         ts, (unsigned)up, event,
         (double)cry_conf,
+        (double)m->max_cry_conf_1s,
         (double)m->input_rms,
         (double)nf_p95,
+        (int)nf_warm,
         (int)latency_ms,
+        (unsigned)m->inference_count,
+        (double)m->inference_fps,
         (unsigned)m->free_heap,
+        (unsigned)m->free_psram,
         (int)m->wifi_rssi,
         (int)m->state);
     if (n <= 0) return;
@@ -195,7 +203,11 @@ void sd_logger_event(const char *event, float cry_conf, int32_t latency_ms)
 #endif
 
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    write_row_locked(event, cry_conf, latency_ms, &m, nf_p95);
+    bool nf_warm = false;
+#if CONFIG_CRY_NOISE_FLOOR_ENABLED
+    nf_warm = noise_floor_is_warm();
+#endif
+    write_row_locked(event, cry_conf, latency_ms, &m, nf_p95, nf_warm);
     xSemaphoreGive(s_lock);
 }
 
@@ -209,7 +221,11 @@ void sd_logger_snapshot(void)
 #endif
 
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    write_row_locked("snapshot", m.last_cry_conf, m.last_inference_ms, &m, nf_p95);
+    bool nf_warm = false;
+#if CONFIG_CRY_NOISE_FLOOR_ENABLED
+    nf_warm = noise_floor_is_warm();
+#endif
+    write_row_locked("snapshot", m.last_cry_conf, m.last_inference_ms, &m, nf_p95, nf_warm);
     xSemaphoreGive(s_lock);
 }
 
@@ -225,9 +241,13 @@ void sd_logger_ntp_sync_marker(void)
     xSemaphoreTake(s_lock, portMAX_DELAY);
     /* Force a new file so the post-NTP entries are in a wallclock-stamped file
      * with a clear boundary marker. */
-    write_row_locked("ntp_synced", 0.0f, 0, &m, nf_p95);
+    bool nf_warm = false;
+#if CONFIG_CRY_NOISE_FLOOR_ENABLED
+    nf_warm = noise_floor_is_warm();
+#endif
+    write_row_locked("ntp_synced", 0.0f, 0, &m, nf_p95, nf_warm);
     reopen_locked();
-    write_row_locked("ntp_file_begin", 0.0f, 0, &m, nf_p95);
+    write_row_locked("ntp_file_begin", 0.0f, 0, &m, nf_p95, nf_warm);
     xSemaphoreGive(s_lock);
 }
 
