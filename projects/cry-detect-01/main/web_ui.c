@@ -146,6 +146,7 @@ static esp_err_t handler_events(httpd_req_t *req)
 
 void web_ui_push_event(const char *type, const char *payload_json)
 {
+    if (!s_lock) return;                 /* web UI not started yet */
     char buf[512];
     int n = snprintf(buf, sizeof(buf), "event: %s\ndata: %s\n\n", type, payload_json);
     if (n <= 0) return;

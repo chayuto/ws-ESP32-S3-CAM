@@ -64,11 +64,11 @@ esp_err_t noise_floor_init(uint32_t warmup_s, float margin)
 
 void noise_floor_submit_rms(float rms)
 {
+    if (!s_lock) return;
     int b = bin_for(rms);
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_hist[b]++;
     s_hist_total++;
-    /* Decay: cap total at 65 535 so we adapt to drift over hours. */
     if (s_hist_total > 65535) {
         for (int i = 0; i < BINS; ++i) s_hist[i] >>= 1;
         s_hist_total >>= 1;
@@ -78,11 +78,13 @@ void noise_floor_submit_rms(float rms)
 
 bool noise_floor_is_warm(void)
 {
+    if (!s_lock) return false;
     return (esp_timer_get_time() - s_start_us) >= (int64_t)s_warmup_s * 1000000;
 }
 
 uint32_t noise_floor_remaining_warmup_s(void)
 {
+    if (!s_lock) return 0;
     int64_t rem_us = (int64_t)s_warmup_s * 1000000 - (esp_timer_get_time() - s_start_us);
     if (rem_us <= 0) return 0;
     return (uint32_t)(rem_us / 1000000);
@@ -90,6 +92,7 @@ uint32_t noise_floor_remaining_warmup_s(void)
 
 float noise_floor_p50(void)
 {
+    if (!s_lock) return 0.0f;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     float v = percentile_locked(0.50f);
     xSemaphoreGive(s_lock);
@@ -98,6 +101,7 @@ float noise_floor_p50(void)
 
 float noise_floor_p95(void)
 {
+    if (!s_lock) return 0.0f;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     float v = percentile_locked(0.95f);
     xSemaphoreGive(s_lock);

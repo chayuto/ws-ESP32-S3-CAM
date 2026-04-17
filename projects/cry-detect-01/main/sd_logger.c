@@ -18,6 +18,11 @@
 
 #include "metrics.h"
 #include "network.h"
+#include "sdkconfig.h"
+
+#if CONFIG_CRY_NOISE_FLOOR_ENABLED
+#include "noise_floor.h"
+#endif
 
 static const char *TAG = "sdlog";
 
@@ -146,22 +151,27 @@ static int format_timestamp(char *buf, size_t max)
     }
 }
 
-void sd_logger_event(const char *event, float cry_conf, int32_t latency_ms)
+static void write_row_locked(const char *event, float cry_conf, int32_t latency_ms,
+                             const cry_metrics_t *m, float nf_p95)
 {
-    cry_metrics_t m;
-    metrics_snapshot(&m);
-
     char ts[48];
     format_timestamp(ts, sizeof(ts));
+    uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
 
     char line[RING_LINE_BYTES];
+    /* schema: wallclock,uptime_s,event,cry_conf,rms,nf_p95,latency_ms,free_heap,rssi,state */
     int n = snprintf(line, sizeof(line),
-        "%s,%s,%.3f,%d,%u,%d\n",
-        ts, event, (double)cry_conf, (int)latency_ms,
-        (unsigned)m.free_heap, (int)m.wifi_rssi);
+        "%s,%u,%s,%.3f,%.1f,%.1f,%d,%u,%d,%d\n",
+        ts, (unsigned)up, event,
+        (double)cry_conf,
+        (double)m->input_rms,
+        (double)nf_p95,
+        (int)latency_ms,
+        (unsigned)m->free_heap,
+        (int)m->wifi_rssi,
+        (int)m->state);
     if (n <= 0) return;
 
-    xSemaphoreTake(s_lock, portMAX_DELAY);
     ring_push(line);
     if (s_f) {
         fwrite(line, 1, n, s_f);
@@ -173,6 +183,51 @@ void sd_logger_event(const char *event, float cry_conf, int32_t latency_ms)
             fflush(s_f);
         }
     }
+}
+
+void sd_logger_event(const char *event, float cry_conf, int32_t latency_ms)
+{
+    cry_metrics_t m;
+    metrics_snapshot(&m);
+    float nf_p95 = 0.0f;
+#if CONFIG_CRY_NOISE_FLOOR_ENABLED
+    nf_p95 = noise_floor_p95();
+#endif
+
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    write_row_locked(event, cry_conf, latency_ms, &m, nf_p95);
+    xSemaphoreGive(s_lock);
+}
+
+void sd_logger_snapshot(void)
+{
+    cry_metrics_t m;
+    metrics_snapshot(&m);
+    float nf_p95 = 0.0f;
+#if CONFIG_CRY_NOISE_FLOOR_ENABLED
+    nf_p95 = noise_floor_p95();
+#endif
+
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    write_row_locked("snapshot", m.last_cry_conf, m.last_inference_ms, &m, nf_p95);
+    xSemaphoreGive(s_lock);
+}
+
+void sd_logger_ntp_sync_marker(void)
+{
+    cry_metrics_t m;
+    metrics_snapshot(&m);
+    float nf_p95 = 0.0f;
+#if CONFIG_CRY_NOISE_FLOOR_ENABLED
+    nf_p95 = noise_floor_p95();
+#endif
+
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    /* Force a new file so the post-NTP entries are in a wallclock-stamped file
+     * with a clear boundary marker. */
+    write_row_locked("ntp_synced", 0.0f, 0, &m, nf_p95);
+    reopen_locked();
+    write_row_locked("ntp_file_begin", 0.0f, 0, &m, nf_p95);
     xSemaphoreGive(s_lock);
 }
 

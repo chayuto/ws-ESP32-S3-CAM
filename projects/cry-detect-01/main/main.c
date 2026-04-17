@@ -37,8 +37,23 @@ static const char *TAG = "main";
 static void on_net_state(bool wifi_up, bool ntp_synced, void *ctx)
 {
     (void)ctx;
+    static bool s_prev_wifi = false;
+    static bool s_prev_ntp = false;
+
     metrics_set_wifi(wifi_up, 0);
     metrics_set_ntp_synced(ntp_synced);
+
+    if (wifi_up && !s_prev_wifi) {
+        sd_logger_event("wifi_up", 0.0f, 0);
+    } else if (!wifi_up && s_prev_wifi) {
+        sd_logger_event("wifi_down", 0.0f, 0);
+    }
+    if (ntp_synced && !s_prev_ntp) {
+        sd_logger_ntp_sync_marker();
+    }
+    s_prev_wifi = wifi_up;
+    s_prev_ntp = ntp_synced;
+
     if (!wifi_up) {
         led_alert_set(LED_STATE_CONNECTING);
         metrics_set_state(CRY_STATE_CONNECTING);
@@ -104,6 +119,8 @@ static esp_err_t mount_yamnet_spiffs(void)
 static void inference_task(void *arg)
 {
     (void)arg;
+    ESP_LOGI(TAG, "infer task: start (core=%d)", xPortGetCoreID());
+
     int16_t *pcm = heap_caps_malloc(MEL_HOP_SAMPLES * sizeof(int16_t), MALLOC_CAP_SPIRAM);
     int8_t *patch = heap_caps_malloc(MEL_FRAMES_PATCH * MEL_BANDS, MALLOC_CAP_SPIRAM);
     if (!pcm || !patch) {
@@ -114,19 +131,41 @@ static void inference_task(void *arg)
 
     float scale = yamnet_input_scale();
     int zp = yamnet_input_zero_point();
-    float base_threshold = 0.5f;
+    float base_threshold = 0.85f;  /* raised to mask FP bias from synthetic PTQ calibration */
+    ESP_LOGI(TAG, "infer: input scale=%.5f zero_point=%d", (double)scale, zp);
+
+    uint32_t loops = 0;
+    uint32_t patches = 0;
+    int64_t last_log_us = esp_timer_get_time();
 
     while (1) {
-        size_t got = audio_capture_read(pcm, MEL_HOP_SAMPLES, portMAX_DELAY);
-        if (got < MEL_HOP_SAMPLES) continue;
+        size_t got = audio_capture_read(pcm, MEL_HOP_SAMPLES, pdMS_TO_TICKS(2000));
+        if (got < MEL_HOP_SAMPLES) {
+            ESP_LOGW(TAG, "infer: audio starved (%u/%u), looping", (unsigned)got, MEL_HOP_SAMPLES);
+            continue;
+        }
+        loops++;
 
         int have_patch = mel_features_push(pcm, got);
-        if (!have_patch) continue;
+        if (!have_patch) {
+            /* heartbeat once per ~1 s so silence is never normal */
+            int64_t now = esp_timer_get_time();
+            if (now - last_log_us > 5000000) {
+                ESP_LOGI(TAG, "infer: alive, loops=%u no patch yet", (unsigned)loops);
+                last_log_us = now;
+            }
+            continue;
+        }
+        patches++;
 
         mel_features_take_patch(patch, scale, zp);
 
         yamnet_result_t r;
-        if (yamnet_run(patch, &r) != ESP_OK) continue;
+        esp_err_t rc = yamnet_run(patch, &r);
+        if (rc != ESP_OK) {
+            ESP_LOGW(TAG, "infer: yamnet_run rc=0x%x", rc);
+            continue;
+        }
 
         metrics_update_inference(r.latency_ms, r.cry_conf);
 
@@ -134,6 +173,12 @@ static void inference_task(void *arg)
         detector_set_threshold(base_threshold + noise_floor_threshold_adjust());
 #endif
         detector_submit(r.cry_conf);
+
+        if ((patches & 0x7) == 0) {
+            ESP_LOGI(TAG, "infer: #%u  ms=%d  cry_conf=%.3f  raw=%d  rms=%.0f  thr=%.2f",
+                     (unsigned)patches, (int)r.latency_ms, (double)r.cry_conf,
+                     (int)r.cry_raw_int8, 0.0, (double)detector_get_threshold());
+        }
 
         char payload[96];
         snprintf(payload, sizeof(payload),
@@ -143,10 +188,14 @@ static void inference_task(void *arg)
     }
 }
 
-/* Samples input RMS into noise_floor and keeps system metrics live. */
+/* Samples input RMS into noise_floor and keeps system metrics live.
+ * Also emits periodic heartbeats to serial and SD so silence is a bug, not normal. */
 static void housekeeping_task(void *arg)
 {
     (void)arg;
+    ESP_LOGI(TAG, "hk task: start (core=%d)", xPortGetCoreID());
+    int64_t next_serial_us = esp_timer_get_time() + 10 * 1000000;
+    int64_t next_sd_us     = esp_timer_get_time() + 30 * 1000000;
     while (1) {
         cry_metrics_t m;
         metrics_snapshot(&m);
@@ -154,6 +203,24 @@ static void housekeeping_task(void *arg)
         noise_floor_submit_rms(m.input_rms);
 #endif
         metrics_refresh_system();
+
+        int64_t now = esp_timer_get_time();
+        if (now >= next_serial_us) {
+            next_serial_us = now + 10 * 1000000;
+            metrics_snapshot(&m);
+            ESP_LOGI(TAG, "hk: up=%us  st=%d  wifi=%d rssi=%d  ntp=%d  sd=%d  heap=%uKB  psram=%uKB  rms=%.0f  infer#=%u  last_ms=%d  fps=%.2f  cry=%.3f",
+                     (unsigned)m.uptime_s, (int)m.state,
+                     (int)m.wifi_connected, (int)m.wifi_rssi,
+                     (int)m.ntp_synced, (int)m.sd_mounted,
+                     (unsigned)(m.free_heap / 1024), (unsigned)(m.free_psram / 1024),
+                     (double)m.input_rms,
+                     (unsigned)m.inference_count, (int)m.last_inference_ms,
+                     (double)m.inference_fps, (double)m.last_cry_conf);
+        }
+        if (now >= next_sd_us) {
+            next_sd_us = now + 30 * 1000000;
+            sd_logger_snapshot();
+        }
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
@@ -191,14 +258,14 @@ void app_main(void)
     ESP_ERROR_CHECK(mel_features_init());
     ESP_ERROR_CHECK(audio_capture_init(CONFIG_CRY_DETECT_SAMPLE_RATE, CONFIG_CRY_DETECT_MIC_GAIN_DB));
 
-    detector_init(0.5f, CONFIG_CRY_DETECT_CONSEC_FRAMES, CONFIG_CRY_DETECT_HOLD_MS,
+    detector_init(0.85f, CONFIG_CRY_DETECT_CONSEC_FRAMES, CONFIG_CRY_DETECT_HOLD_MS,
                   on_detector_state, NULL);
 
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED
     ESP_ERROR_CHECK(noise_floor_init(CONFIG_CRY_NOISE_FLOOR_WARMUP_S,
                                      (float)CONFIG_CRY_NOISE_FLOOR_MARGIN_X100 / 100.0f));
 #endif
-    xTaskCreatePinnedToCore(housekeeping_task, "hk", 3072, NULL, 2, NULL, 0);
+    xTaskCreatePinnedToCore(housekeeping_task, "hk", 6 * 1024, NULL, 2, NULL, 0);
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
     ESP_ERROR_CHECK(audio_stream_init(CONFIG_CRY_STREAM_MAX_LISTENERS,
@@ -217,13 +284,16 @@ void app_main(void)
     event_recorder_init(&rec);
 #endif
 
+    /* network_start must run before web_ui_start so LWIP is initialized.
+     * inference_task starts BEFORE web_ui_start, so web_ui_push_event
+     * must NULL-guard its internal lock (see web_ui.c). */
+    ESP_ERROR_CHECK(network_start("cry-detect-01", on_net_state, NULL));
+
     if (s_yamnet_up) {
         xTaskCreatePinnedToCore(inference_task, "infer", 8 * 1024, NULL, 5, NULL, 1);
     } else {
         ESP_LOGW(TAG, "skipping inference task: no model");
     }
-
-    ESP_ERROR_CHECK(network_start("cry-detect-01", on_net_state, NULL));
 
 #if CONFIG_CRY_DETECT_WEB_UI_ENABLED
     ESP_ERROR_CHECK(web_ui_start(CONFIG_CRY_DETECT_SSE_MAX_CLIENTS));
