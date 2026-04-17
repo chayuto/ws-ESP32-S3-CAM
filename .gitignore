@@ -18,6 +18,7 @@ managed_components/
 # Large binary model artifacts (downloaded/generated via tools/)
 projects/*/spiffs/*.tflite
 projects/*/spiffs/*.bin
+projects/*/hf/*.tflite
 projects/*/tools/.yamnet_work/
 
 # Wi-Fi creds live in sdkconfig.defaults — never commit the real file; only the template
