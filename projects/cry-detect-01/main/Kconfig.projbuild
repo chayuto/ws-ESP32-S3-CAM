@@ -25,11 +25,15 @@ menu "Cry-detect-01"
 
     config CRY_DETECT_CONSEC_FRAMES
         int "Consecutive frames over threshold to alert"
-        default 3
+        default 6
         range 1 20
         help
-            Temporal smoothing. With ~2 inferences/s, 3 frames ≈ 1.5 s of
-            sustained above-threshold cry evidence before LED fires.
+            Temporal smoothing. With ~1.4 inferences/s, 6 frames ≈ 4.3 s of
+            sustained above-threshold cry evidence before LED fires. Raised
+            from 3 → 6 on 2026-04-18 after threshold dropped 0.85 → 0.65 to
+            catch true cries (the synthetic-PTQ calibration keeps cry_conf
+            above 0.55 even in silence, so we lean on temporal smoothing
+            for stability rather than a tight threshold).
 
     config CRY_DETECT_HOLD_MS
         int "Alert hold duration (ms)"

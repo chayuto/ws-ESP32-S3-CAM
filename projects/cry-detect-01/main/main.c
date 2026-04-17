@@ -134,7 +134,13 @@ static void inference_task(void *arg)
 
     float scale = yamnet_input_scale();
     int zp = yamnet_input_zero_point();
-    float base_threshold = 0.85f;  /* raised to mask FP bias from synthetic PTQ calibration */
+    /* 2026-04-18: dropped 0.85 → 0.65 after a 6.5 h deployment logged ZERO
+     * alerts despite real crying events — threshold was above what the
+     * synthetic-calibration bias allowed a true positive to reach. Paired
+     * with CRY_DETECT_CONSEC_FRAMES=6 in Kconfig for stability against
+     * single-frame spikes. Re-evaluate once Stage 2.1 real-audio
+     * calibration lands. */
+    float base_threshold = 0.65f;
     ESP_LOGI(TAG, "infer: input scale=%.5f zero_point=%d num_classes=%d",
              (double)scale, zp, yamnet_num_classes());
 
@@ -276,7 +282,7 @@ void app_main(void)
     ESP_ERROR_CHECK(mel_features_init());
     ESP_ERROR_CHECK(audio_capture_init(CONFIG_CRY_DETECT_SAMPLE_RATE, CONFIG_CRY_DETECT_MIC_GAIN_DB));
 
-    detector_init(0.85f, CONFIG_CRY_DETECT_CONSEC_FRAMES, CONFIG_CRY_DETECT_HOLD_MS,
+    detector_init(0.65f, CONFIG_CRY_DETECT_CONSEC_FRAMES, CONFIG_CRY_DETECT_HOLD_MS,
                   on_detector_state, NULL);
 
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED
