@@ -12,6 +12,7 @@
 #include "sdkconfig.h"
 
 #include "sd_logger.h"
+#include "led_alert.h"
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
 #include "audio_stream.h"
@@ -72,6 +73,23 @@ static esp_err_t handler_metrics(httpd_req_t *req)
 static esp_err_t handler_healthz(httpd_req_t *req)
 {
     return httpd_resp_send(req, "OK", 2);
+}
+
+static esp_err_t handler_led_brightness(httpd_req_t *req)
+{
+    char qbuf[64];
+    if (httpd_req_get_url_query_str(req, qbuf, sizeof(qbuf)) == ESP_OK) {
+        char val[8];
+        if (httpd_query_key_value(qbuf, "pct", val, sizeof(val)) == ESP_OK) {
+            int pct = atoi(val);
+            led_alert_set_brightness(pct);
+        }
+    }
+    char resp[64];
+    int n = snprintf(resp, sizeof(resp),
+                     "{\"brightness\":%d}", led_alert_get_brightness());
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, resp, n);
 }
 
 static esp_err_t handler_log_tail(httpd_req_t *req)
@@ -181,12 +199,14 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
     httpd_uri_t h_events  = { .uri = "/events",  .method = HTTP_GET, .handler = handler_events };
     httpd_uri_t h_log     = { .uri = "/log/tail",.method = HTTP_GET, .handler = handler_log_tail };
     httpd_uri_t h_health  = { .uri = "/healthz", .method = HTTP_GET, .handler = handler_healthz };
+    httpd_uri_t h_led     = { .uri = "/led/brightness", .method = HTTP_GET, .handler = handler_led_brightness };
     httpd_register_uri_handler(s_server, &h_index);
     httpd_register_uri_handler(s_server, &h_js);
     httpd_register_uri_handler(s_server, &h_metrics);
     httpd_register_uri_handler(s_server, &h_events);
     httpd_register_uri_handler(s_server, &h_log);
     httpd_register_uri_handler(s_server, &h_health);
+    httpd_register_uri_handler(s_server, &h_led);
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
     httpd_uri_t h_stream = { .uri = "/audio.pcm", .method = HTTP_GET, .handler = audio_stream_http_handler };

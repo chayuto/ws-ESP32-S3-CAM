@@ -192,9 +192,35 @@
     }
   });
 
+  /* ---------- LED brightness ---------- */
+  async function fetchBrightness() {
+    try {
+      const r = await fetch('/led/brightness');
+      if (!r.ok) return;
+      const j = await r.json();
+      $('led_slider').value = j.brightness;
+      $('led_val').textContent = j.brightness;
+    } catch (_) {}
+  }
+  async function setBrightness(pct) {
+    try {
+      const r = await fetch('/led/brightness?pct=' + pct);
+      if (r.ok) {
+        const j = await r.json();
+        $('led_slider').value = j.brightness;
+        $('led_val').textContent = j.brightness;
+      }
+    } catch (_) {}
+  }
+  $('led_slider').addEventListener('change', e => setBrightness(e.target.value));
+  $('led_night').addEventListener('click', () => setBrightness(5));
+  $('led_off').addEventListener('click', () => setBrightness(0));
+  $('led_full').addEventListener('click', () => setBrightness(100));
+
   /* ---------- bootstrap ---------- */
   drawChart();
   pollMetrics();
+  fetchBrightness();
   setInterval(pollMetrics, 2000);
   connectSSE();
 })();

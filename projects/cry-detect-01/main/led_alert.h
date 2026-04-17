@@ -14,3 +14,8 @@ typedef enum {
 
 esp_err_t led_alert_init(int expander_pin);
 void led_alert_set(led_state_t s);
+
+/* 0 = off, 100 = full brightness. Applied as software-PWM duty to the
+ * "on" phase of every state. Persisted in NVS so it survives reboot. */
+void led_alert_set_brightness(int percent);
+int led_alert_get_brightness(void);
