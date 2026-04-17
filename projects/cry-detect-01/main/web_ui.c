@@ -8,6 +8,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "sdkconfig.h"
 
@@ -94,10 +95,18 @@ static esp_err_t handler_led_brightness(httpd_req_t *req)
 
 static esp_err_t handler_log_tail(httpd_req_t *req)
 {
-    char buf[8192];
-    size_t n = sd_logger_tail(buf, sizeof(buf), 50);
+    /* 8 KB off the handler task's 6 KB stack would corrupt it — use PSRAM heap. */
+    char *buf = heap_caps_malloc(8192, MALLOC_CAP_SPIRAM);
+    if (!buf) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_send(req, "no heap", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+    size_t n = sd_logger_tail(buf, 8192, 50);
     httpd_resp_set_type(req, "text/plain");
-    return httpd_resp_send(req, buf, n);
+    esp_err_t rc = httpd_resp_send(req, buf, n);
+    free(buf);
+    return rc;
 }
 
 static int register_client(int fd)

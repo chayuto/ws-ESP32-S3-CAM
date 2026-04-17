@@ -198,3 +198,23 @@ extern "C" esp_err_t yamnet_run(const int8_t *patch_96x64, yamnet_result_t *resu
     result->latency_ms = latency;
     return ESP_OK;
 }
+
+extern "C" int yamnet_num_classes(void)
+{
+    if (!g_output) return 0;
+    int n = 1;
+    for (int i = 0; i < g_output->dims->size; ++i) n *= g_output->dims->data[i];
+    return n;
+}
+
+extern "C" void yamnet_get_confidences(float *out, int max_classes)
+{
+    if (!g_output || !out) return;
+    int n = yamnet_num_classes();
+    if (max_classes < n) n = max_classes;
+    for (int i = 0; i < n; ++i) {
+        int8_t raw = g_output->data.int8[i];
+        float logit = g_output_scale * (float)(raw - g_output_zero_point);
+        out[i] = 1.0f / (1.0f + expf(-logit));
+    }
+}

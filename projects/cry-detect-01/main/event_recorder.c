@@ -13,6 +13,7 @@
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_task_wdt.h"
 
 #include "audio_capture.h"
 #include "network.h"
@@ -147,8 +148,10 @@ static void recorder_task(void *arg)
         vTaskDelete(NULL);
         return;
     }
+    esp_task_wdt_add(NULL);
 
     while (1) {
+        esp_task_wdt_reset();
         size_t got = audio_capture_tap_read(s_tap, buf, chunk, portMAX_DELAY);
         if (got == 0) continue;
 

@@ -31,6 +31,24 @@ typedef struct {
 
 static cry_metrics_t s_metrics;
 static SemaphoreHandle_t s_lock;
+
+/* Curated watched-class table. Indices from Google AudioSet / YAMNet
+ * class map. Names are short for log-column headers. Order is
+ * fixed: changing this column order breaks downstream SD-log readers. */
+const int cry_watched_idx[CRY_WATCHED_N] = {
+    20, 19, 21, 22,                  /* cry spectrum */
+    0,  1,  13, 14, 15,              /* context (speech + joy) */
+    65, 70, 78, 42, 44,              /* FP sources (babble, bark, meow, cough, sneeze) */
+    371, 406,                        /* appliance noise (vacuum, fan) */
+    11, 389, 390, 393,               /* urgent (scream, alarm clock, siren, smoke alarm) */
+};
+const char *const cry_watched_name[CRY_WATCHED_N] = {
+    "cry_baby", "cry_adult", "whimper", "wail_moan",
+    "speech", "child_speech", "laughter", "baby_laughter", "giggle",
+    "hubbub", "dog_bark", "meow", "cough", "sneeze",
+    "vacuum", "fan",
+    "scream", "alarm_clock", "siren", "smoke_alarm",
+};
 static int32_t s_latency_hist[P95_HISTORY];
 static uint32_t s_latency_hist_pos;
 static int64_t s_last_inference_us;
@@ -157,6 +175,15 @@ void metrics_set_sd_mounted(bool v)
     xSemaphoreGive(s_lock);
 }
 
+void metrics_update_watched(const float *confs, int n)
+{
+    if (!confs) return;
+    if (n > CRY_WATCHED_N) n = CRY_WATCHED_N;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    for (int i = 0; i < n; ++i) s_metrics.watched_conf[i] = confs[i];
+    xSemaphoreGive(s_lock);
+}
+
 void metrics_refresh_system(void)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
@@ -235,7 +262,8 @@ size_t metrics_to_json(char *buf, size_t max_len)
         "\"input_rms\":%.1f,\"sse_clients\":%u,\"log_bytes_written\":%u,"
         "\"noise_floor_p50\":%.1f,\"noise_floor_p95\":%.1f,"
         "\"noise_floor_warm\":%s,\"noise_floor_remaining_s\":%u,"
-        "\"stream_enabled\":%s,\"stream_listeners\":%u}",
+        "\"stream_enabled\":%s,\"stream_listeners\":%u,"
+        "\"watched\":{",
         state_str(m.state),
         m.ntp_synced ? "true" : "false",
         m.wifi_connected ? "true" : "false",
@@ -252,5 +280,12 @@ size_t metrics_to_json(char *buf, size_t max_len)
         (double)nf_p50, (double)nf_p95,
         nf_warm ? "true" : "false", (unsigned)nf_rem,
         stream_enabled ? "true" : "false", (unsigned)listeners);
-    return n < 0 ? 0 : (size_t)n;
+    if (n < 0) return 0;
+
+    for (int i = 0; i < CRY_WATCHED_N && n < (int)max_len - 40; ++i) {
+        n += snprintf(buf + n, max_len - n, "%s\"%s\":%.3f",
+                      i ? "," : "", cry_watched_name[i], (double)m.watched_conf[i]);
+    }
+    n += snprintf(buf + n, max_len - n, "}}");
+    return (size_t)n;
 }

@@ -4,6 +4,13 @@
 #include <stdint.h>
 #include <time.h>
 
+/* Curated 20 AudioSet class indices we read every inference.
+ * See docs/research/yamnet-class-exploitation.md for rationale.
+ * Order is fixed (columns in SD log + fields in /metrics depend on it). */
+#define CRY_WATCHED_N 20
+extern const int cry_watched_idx[CRY_WATCHED_N];
+extern const char *const cry_watched_name[CRY_WATCHED_N];
+
 typedef enum {
     CRY_STATE_BOOT = 0,
     CRY_STATE_CONNECTING,
@@ -36,6 +43,8 @@ typedef struct {
     float input_rms;
     uint32_t sse_clients;
     uint32_t log_bytes_written;
+
+    float watched_conf[CRY_WATCHED_N];
 } cry_metrics_t;
 
 void metrics_init(void);
@@ -47,6 +56,7 @@ void metrics_set_ntp_synced(bool v);
 void metrics_set_wifi(bool connected, int8_t rssi);
 void metrics_set_sd_mounted(bool v);
 void metrics_refresh_system(void);
+void metrics_update_watched(const float *watched_confs, int n);
 void metrics_snapshot(cry_metrics_t *out);
 
 typedef void (*metrics_event_cb_t)(const cry_metrics_t *snap, void *ctx);

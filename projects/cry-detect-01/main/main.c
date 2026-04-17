@@ -20,6 +20,7 @@
 #include "web_ui.h"
 #include "noise_floor.h"
 #include "esp_heap_caps.h"
+#include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -120,10 +121,12 @@ static void inference_task(void *arg)
 {
     (void)arg;
     ESP_LOGI(TAG, "infer task: start (core=%d)", xPortGetCoreID());
+    esp_task_wdt_add(NULL);
 
     int16_t *pcm = heap_caps_malloc(MEL_HOP_SAMPLES * sizeof(int16_t), MALLOC_CAP_SPIRAM);
     int8_t *patch = heap_caps_malloc(MEL_FRAMES_PATCH * MEL_BANDS, MALLOC_CAP_SPIRAM);
-    if (!pcm || !patch) {
+    float *all_confs = heap_caps_malloc(521 * sizeof(float), MALLOC_CAP_SPIRAM);
+    if (!pcm || !patch || !all_confs) {
         ESP_LOGE(TAG, "inference alloc failed");
         vTaskDelete(NULL);
         return;
@@ -132,13 +135,16 @@ static void inference_task(void *arg)
     float scale = yamnet_input_scale();
     int zp = yamnet_input_zero_point();
     float base_threshold = 0.85f;  /* raised to mask FP bias from synthetic PTQ calibration */
-    ESP_LOGI(TAG, "infer: input scale=%.5f zero_point=%d", (double)scale, zp);
+    ESP_LOGI(TAG, "infer: input scale=%.5f zero_point=%d num_classes=%d",
+             (double)scale, zp, yamnet_num_classes());
 
     uint32_t loops = 0;
     uint32_t patches = 0;
     int64_t last_log_us = esp_timer_get_time();
 
     while (1) {
+        esp_task_wdt_reset();
+
         size_t got = audio_capture_read(pcm, MEL_HOP_SAMPLES, pdMS_TO_TICKS(2000));
         if (got < MEL_HOP_SAMPLES) {
             ESP_LOGW(TAG, "infer: audio starved (%u/%u), looping", (unsigned)got, MEL_HOP_SAMPLES);
@@ -148,7 +154,6 @@ static void inference_task(void *arg)
 
         int have_patch = mel_features_push(pcm, got);
         if (!have_patch) {
-            /* heartbeat once per ~1 s so silence is never normal */
             int64_t now = esp_timer_get_time();
             if (now - last_log_us > 5000000) {
                 ESP_LOGI(TAG, "infer: alive, loops=%u no patch yet", (unsigned)loops);
@@ -167,6 +172,13 @@ static void inference_task(void *arg)
             continue;
         }
 
+        yamnet_get_confidences(all_confs, 521);
+        float watched[CRY_WATCHED_N];
+        for (int i = 0; i < CRY_WATCHED_N; ++i) {
+            watched[i] = all_confs[cry_watched_idx[i]];
+        }
+        metrics_update_watched(watched, CRY_WATCHED_N);
+
         metrics_update_inference(r.latency_ms, r.cry_conf);
 
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED
@@ -175,15 +187,19 @@ static void inference_task(void *arg)
         detector_submit(r.cry_conf);
 
         if ((patches & 0x7) == 0) {
-            ESP_LOGI(TAG, "infer: #%u  ms=%d  cry_conf=%.3f  raw=%d  rms=%.0f  thr=%.2f",
-                     (unsigned)patches, (int)r.latency_ms, (double)r.cry_conf,
-                     (int)r.cry_raw_int8, 0.0, (double)detector_get_threshold());
+            ESP_LOGI(TAG, "infer: #%u  ms=%d  cry=%.3f  laugh=%.3f  speech=%.3f  bark=%.3f  smoke=%.3f  thr=%.2f",
+                     (unsigned)patches, (int)r.latency_ms,
+                     (double)watched[0], (double)watched[7],
+                     (double)watched[4], (double)watched[10],
+                     (double)watched[19],
+                     (double)detector_get_threshold());
         }
 
-        char payload[96];
+        char payload[128];
         snprintf(payload, sizeof(payload),
-                 "{\"conf\":%.3f,\"ms\":%d}",
-                 (double)r.cry_conf, (int)r.latency_ms);
+                 "{\"conf\":%.3f,\"ms\":%d,\"cry\":%.3f,\"laugh\":%.3f,\"smoke\":%.3f}",
+                 (double)r.cry_conf, (int)r.latency_ms,
+                 (double)watched[0], (double)watched[7], (double)watched[19]);
         web_ui_push_event("inference", payload);
     }
 }
@@ -194,9 +210,11 @@ static void housekeeping_task(void *arg)
 {
     (void)arg;
     ESP_LOGI(TAG, "hk task: start (core=%d)", xPortGetCoreID());
+    esp_task_wdt_add(NULL);
     int64_t next_serial_us = esp_timer_get_time() + 10 * 1000000;
     int64_t next_sd_us     = esp_timer_get_time() + 30 * 1000000;
     while (1) {
+        esp_task_wdt_reset();
         cry_metrics_t m;
         metrics_snapshot(&m);
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED

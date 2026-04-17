@@ -27,7 +27,7 @@
 static const char *TAG = "sdlog";
 
 #define RING_LINES       80
-#define RING_LINE_BYTES  192
+#define RING_LINE_BYTES  448   /* v3 schema: v2 cols + CRY_WATCHED_N floats */
 #define RING_BYTES       (RING_LINES * RING_LINE_BYTES)
 
 static char *s_ring;
@@ -164,7 +164,7 @@ static void write_row_locked(const char *event, float cry_conf, int32_t latency_
      * latency_ms,inference_count,inference_fps,free_heap,free_psram,rssi,state
      */
     int n = snprintf(line, sizeof(line),
-        "%s,%u,%s,%.3f,%.3f,%.1f,%.1f,%d,%d,%u,%.2f,%u,%u,%d,%d\n",
+        "%s,%u,%s,%.3f,%.3f,%.1f,%.1f,%d,%d,%u,%.2f,%u,%u,%d,%d",
         ts, (unsigned)up, event,
         (double)cry_conf,
         (double)m->max_cry_conf_1s,
@@ -179,6 +179,16 @@ static void write_row_locked(const char *event, float cry_conf, int32_t latency_
         (int)m->wifi_rssi,
         (int)m->state);
     if (n <= 0) return;
+
+    /* v3 schema: 20 watched-class confidences, stable column order */
+    for (int i = 0; i < CRY_WATCHED_N && n < (int)sizeof(line) - 8; ++i) {
+        n += snprintf(line + n, sizeof(line) - n, ",%.3f",
+                      (double)m->watched_conf[i]);
+    }
+    if (n < (int)sizeof(line) - 2) {
+        line[n++] = '\n';
+        line[n]   = '\0';
+    }
 
     ring_push(line);
     if (s_f) {

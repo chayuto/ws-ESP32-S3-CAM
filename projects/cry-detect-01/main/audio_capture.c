@@ -9,6 +9,7 @@
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_task_wdt.h"
 
 #include "bsp/esp-bsp.h"
 #include "esp_codec_dev.h"
@@ -69,9 +70,11 @@ static void capture_task(void *arg)
         vTaskDelete(NULL);
         return;
     }
+    esp_task_wdt_add(NULL);
 
     uint32_t rms_downsample = 0;
     while (1) {
+        esp_task_wdt_reset();
         int rc = esp_codec_dev_read(s_mic, buf, READ_CHUNK_SAMPLES * sizeof(int16_t));
         if (rc != ESP_CODEC_DEV_OK) {
             ESP_LOGW(TAG, "codec read rc=%d", rc);

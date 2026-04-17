@@ -4,6 +4,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"
 #include "nvs.h"
 
 #include "bsp/esp-bsp.h"
@@ -71,10 +72,12 @@ static void set_level_dimmed(int logical_on)
 
 static void led_task(void *arg)
 {
+    esp_task_wdt_add(NULL);
     int64_t last_toggle = 0;
     int level = 0;
 
     while (1) {
+        esp_task_wdt_reset();
         int64_t now = esp_timer_get_time();
         int period_ms = 0;
         int solid = -1;
