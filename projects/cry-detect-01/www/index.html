@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cry-detect-01</title>
+<style>
+  :root {
+    --bg: #111318; --panel: #1a1d24; --ink: #e3e6ef; --muted: #9aa0ac;
+    --ok: #64d18a; --warn: #e3b341; --crit: #ff6b6b; --edge: #2a2f3a;
+    --live: #5ba9ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { padding: 16px 20px; border-bottom: 1px solid var(--edge);
+    display: flex; align-items: center; justify-content: space-between; }
+  header .title { font-weight: 600; letter-spacing: 0.02em; }
+  header .host { color: var(--muted); font-size: 12px; }
+  main { padding: 20px; max-width: 960px; margin: 0 auto;
+    display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+  .card { background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 10px; padding: 16px; }
+  .card.big { grid-column: 1/3; display: flex; align-items: center; justify-content: space-between; }
+  .state { font-size: 32px; font-weight: 700; letter-spacing: 0.02em; }
+  .state.idle   { color: var(--muted); }
+  .state.listen { color: var(--ok); }
+  .state.alert  { color: var(--crit); animation: pulse 0.7s infinite alternate; }
+  .state.warn   { color: var(--warn); }
+  @keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
+  .conf-bar { width: 200px; height: 10px; background: var(--edge);
+    border-radius: 6px; overflow: hidden; }
+  .conf-bar > div { height: 100%; background: var(--ok); width: 0;
+    transition: width 150ms linear; }
+  .conf-bar.hi > div { background: var(--crit); }
+  .row { display: grid; grid-template-columns: 1fr auto;
+    gap: 6px 12px; align-items: baseline; padding: 3px 0; }
+  .row .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .row .v { font-variant-numeric: tabular-nums; }
+  canvas { width: 100%; height: 120px; }
+  footer { padding: 12px 20px; color: var(--muted); font-size: 11px;
+    border-top: 1px solid var(--edge); text-align: center; }
+  ul.log { list-style: none; padding: 0; margin: 0; font: 12px/1.4 Menlo, monospace;
+    max-height: 220px; overflow: auto; }
+  ul.log li { padding: 4px 0; color: var(--muted); display: flex; gap: 10px; align-items: baseline; }
+  ul.log li.alert { color: var(--ink); }
+  ul.log a { color: var(--live); text-decoration: none; }
+  ul.log a:hover { text-decoration: underline; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px;
+    background: var(--edge); font-size: 11px; color: var(--muted); }
+  .pill.on { background: #203826; color: var(--ok); }
+  .pill.warn { background: #3a2f15; color: var(--warn); }
+  .pill.live { background: #152838; color: var(--live); }
+  button.listen { font: 600 14px/1 -apple-system, sans-serif; padding: 10px 16px;
+    background: var(--live); color: #081120; border: none; border-radius: 8px; cursor: pointer; }
+  button.listen.on { background: var(--warn); color: #2a1f00; }
+  button.listen:disabled { opacity: 0.5; cursor: not-allowed; }
+  .listen-row { display: flex; align-items: center; gap: 12px; }
+  .listen-hint { font-size: 11px; color: var(--muted); }
+  .privacy { font-size: 11px; color: var(--warn); margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="title">cry-detect-01</div>
+  <div class="host" id="host"></div>
+</header>
+
+<main>
+  <section class="card big">
+    <div>
+      <div class="state idle" id="state">—</div>
+      <div class="host" id="state_sub">waiting for first inference</div>
+    </div>
+    <div style="text-align:right">
+      <div class="k" style="color:var(--muted);font-size:11px;letter-spacing:.05em;margin-bottom:6px">CRY CONFIDENCE</div>
+      <div class="conf-bar" id="conf_bar"><div id="conf_fill"></div></div>
+      <div class="host" style="margin-top:4px" id="conf_val">0.00</div>
+    </div>
+  </section>
+
+  <section class="card" style="grid-column:1/3">
+    <div class="listen-row">
+      <button class="listen" id="btn_listen">🔊 Listen</button>
+      <div>
+        <div id="listen_status" class="listen-hint">Tap to hear the room in real time.</div>
+        <div id="listen_count" class="listen-hint" style="margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="privacy" id="privacy_note"></div>
+  </section>
+
+  <section class="card">
+    <div class="row"><span class="k">inference</span><span class="v"><span id="m_ms">—</span> ms (p95 <span id="m_p95">—</span>)</span></div>
+    <div class="row"><span class="k">fps</span><span class="v" id="m_fps">—</span></div>
+    <div class="row"><span class="k">alerts</span><span class="v" id="m_alerts">0</span></div>
+    <div class="row"><span class="k">input rms</span><span class="v" id="m_rms">—</span></div>
+    <div class="row"><span class="k">noise floor</span><span class="v" id="m_floor">—</span></div>
+    <div class="row"><span class="k">uptime</span><span class="v" id="m_uptime">—</span></div>
+  </section>
+
+  <section class="card">
+    <div class="row"><span class="k">wifi</span><span class="v" id="m_wifi">—</span></div>
+    <div class="row"><span class="k">rssi</span><span class="v" id="m_rssi">—</span></div>
+    <div class="row"><span class="k">ntp</span><span class="v" id="m_ntp">—</span></div>
+    <div class="row"><span class="k">sd</span><span class="v" id="m_sd">—</span></div>
+    <div class="row"><span class="k">heap / psram</span><span class="v" id="m_heap">—</span></div>
+    <div class="row"><span class="k">stream listeners</span><span class="v" id="m_listeners">—</span></div>
+  </section>
+
+  <section class="card" style="grid-column:1/3">
+    <div class="k" style="color:var(--muted);font-size:11px;letter-spacing:.05em;margin-bottom:8px">CLASS-20 CONFIDENCE (last 60 s)</div>
+    <canvas id="chart" width="720" height="120"></canvas>
+  </section>
+
+  <section class="card" style="grid-column:1/3">
+    <div class="k" style="color:var(--muted);font-size:11px;letter-spacing:.05em;margin-bottom:8px">RECENT EVENTS — tap ▶ to play the recorded clip</div>
+    <ul class="log" id="log"></ul>
+  </section>
+</main>
+
+<footer>cry-detect-01 &bull; SSE live &bull; <span id="conn">connecting…</span></footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

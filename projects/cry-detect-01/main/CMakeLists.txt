@@ -1,0 +1,37 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "audio_capture.c"
+        "audio_stream.c"
+        "mel_features.c"
+        "yamnet.cc"
+        "detector.c"
+        "led_alert.c"
+        "network.c"
+        "sd_logger.c"
+        "metrics.c"
+        "web_ui.c"
+        "event_recorder.c"
+        "noise_floor.c"
+    INCLUDE_DIRS
+        "."
+    EMBED_TXTFILES
+        "../www/index.html"
+        "../www/app.js"
+    PRIV_REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_http_server
+        esp_event
+        esp_netif
+        esp_timer
+        esp_psram
+        lwip
+        fatfs
+        spiffs
+        sdmmc
+        vfs
+        driver
+        protocol_examples_common
+        mdns
+)

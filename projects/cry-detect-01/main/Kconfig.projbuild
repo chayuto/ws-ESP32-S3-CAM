@@ -1,0 +1,150 @@
+menu "Cry-detect-01"
+
+    config CRY_DETECT_SAMPLE_RATE
+        int "Audio sample rate (Hz)"
+        default 16000
+        help
+            Must match YAMNet expectation (16 000 Hz). Do not change unless
+            switching to a retrained model.
+
+    config CRY_DETECT_MIC_GAIN_DB
+        int "ES7210 analog PGA gain (dB)"
+        default 36
+        range 0 50
+        help
+            Start 36 dB indoors; raise for quiet rooms. Check /metrics RMS.
+
+    config CRY_DETECT_THRESHOLD
+        int "Class-20 INT8 detection threshold"
+        default 40
+        range -128 127
+        help
+            Raw INT8 logit threshold for class 20 (Baby cry, infant cry).
+            40 ≈ 0.31 after dequantisation on a symmetric [-1, 1] output.
+            Raise to reduce false positives, lower to increase sensitivity.
+
+    config CRY_DETECT_CONSEC_FRAMES
+        int "Consecutive frames over threshold to alert"
+        default 3
+        range 1 20
+        help
+            Temporal smoothing. With ~2 inferences/s, 3 frames ≈ 1.5 s of
+            sustained above-threshold cry evidence before LED fires.
+
+    config CRY_DETECT_HOLD_MS
+        int "Alert hold duration (ms)"
+        default 5000
+        range 500 60000
+
+    config CRY_DETECT_MODEL_PATH
+        string "YAMNet .tflite path on SPIFFS"
+        default "/yamnet/yamnet.tflite"
+
+    config CRY_DETECT_TENSOR_ARENA_KB
+        int "TFLite Micro tensor arena (KB, PSRAM)"
+        default 1024
+        range 256 4096
+
+    config CRY_DETECT_WEB_UI_ENABLED
+        bool "Enable HTTP web UI"
+        default y
+
+    config CRY_DETECT_SSE_MAX_CLIENTS
+        int "Max concurrent SSE clients"
+        default 2
+        range 1 4
+        depends on CRY_DETECT_WEB_UI_ENABLED
+
+    config CRY_DETECT_SD_ENABLED
+        bool "Mount SD card for logging"
+        default y
+        help
+            Fails soft if card absent. Falls back to logs_fat partition.
+
+    config CRY_DETECT_LOG_ROTATE_KB
+        int "Rotate log file every N KB"
+        default 256
+        range 32 2048
+
+    config CRY_DETECT_LED_EXPANDER_PIN
+        int "CH32V003 IO-expander pin for red LED (active-LOW)"
+        default 6
+        range 0 7
+
+    config CRY_DETECT_BUTTON_GPIO
+        int "User button GPIO"
+        default 15
+
+    menu "Live audio stream"
+
+        config CRY_STREAM_COMPILED_IN
+            bool "Include live audio streaming endpoint"
+            default y
+            help
+                Master compile-time toggle. Streaming defaults to OFF at
+                boot regardless — browser must opt in.
+
+        config CRY_STREAM_MAX_LISTENERS
+            int "Max concurrent stream listeners"
+            default 2
+            range 1 4
+            depends on CRY_STREAM_COMPILED_IN
+
+        config CRY_STREAM_RING_KB
+            int "Per-listener ring buffer size (KB)"
+            default 32
+            range 8 256
+            depends on CRY_STREAM_COMPILED_IN
+
+    endmenu
+
+    menu "Event recorder (auto-WAV on detect)"
+
+        config CRY_REC_COMPILED_IN
+            bool "Record 40 s of PCM around each detection"
+            default y
+
+        config CRY_REC_PREROLL_S
+            int "Pre-roll seconds (kept in PSRAM ring)"
+            default 10
+            range 1 30
+            depends on CRY_REC_COMPILED_IN
+
+        config CRY_REC_POSTROLL_S
+            int "Post-trigger recording seconds"
+            default 30
+            range 5 120
+            depends on CRY_REC_COMPILED_IN
+
+        config CRY_REC_KEEP_FILES
+            int "Max retained WAV files (oldest deleted)"
+            default 50
+            range 5 500
+            depends on CRY_REC_COMPILED_IN
+
+    endmenu
+
+    menu "Adaptive noise floor"
+
+        config CRY_NOISE_FLOOR_ENABLED
+            bool "Learn ambient noise floor and scale threshold"
+            default y
+
+        config CRY_NOISE_FLOOR_WARMUP_S
+            int "Warm-up window before adaptation begins (s)"
+            default 300
+            range 30 1800
+            depends on CRY_NOISE_FLOOR_ENABLED
+
+        config CRY_NOISE_FLOOR_MARGIN_X100
+            int "Threshold margin above baseline (× 0.01)"
+            default 10
+            range 0 50
+            depends on CRY_NOISE_FLOOR_ENABLED
+            help
+                Final threshold = base + (this/100) when noise floor is
+                high. 10 = +0.10 when ambient is loud.
+
+    endmenu
+
+endmenu

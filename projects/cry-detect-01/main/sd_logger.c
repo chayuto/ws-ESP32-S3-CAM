@@ -1,0 +1,196 @@
+#include "sd_logger.h"
+
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "esp_log.h"
+#include "esp_timer.h"
+#include "esp_heap_caps.h"
+#include "esp_vfs_fat.h"
+#include "esp_wifi.h"
+
+#include "bsp/esp-bsp.h"
+
+#include "metrics.h"
+#include "network.h"
+
+static const char *TAG = "sdlog";
+
+#define RING_LINES       80
+#define RING_LINE_BYTES  120
+#define RING_BYTES       (RING_LINES * RING_LINE_BYTES)
+
+static char *s_ring;
+static uint32_t s_ring_head;
+static uint32_t s_ring_count;
+
+static SemaphoreHandle_t s_lock;
+static FILE *s_f;
+static char s_path[64];
+static uint32_t s_rotate_bytes;
+static uint32_t s_written_in_file;
+static uint32_t s_total_written;
+static bool s_sd_mounted;
+static bool s_fallback_fat_mounted;
+static int s_seq_counter;
+
+static const char *mount_prefix(void)
+{
+    return s_sd_mounted ? BSP_SD_MOUNT_POINT : "/logs";
+}
+
+static void make_path_locked(void)
+{
+    char tsdir[16];
+    if (network_is_ntp_synced()) {
+        time_t now = time(NULL);
+        struct tm tmv;
+        localtime_r(&now, &tmv);
+        strftime(tsdir, sizeof(tsdir), "%Y%m%d", &tmv);
+        snprintf(s_path, sizeof(s_path), "%s/cry-%s.log", mount_prefix(), tsdir);
+    } else {
+        snprintf(s_path, sizeof(s_path), "%s/cry-%04d.log", mount_prefix(), s_seq_counter++);
+    }
+}
+
+static void reopen_locked(void)
+{
+    if (s_f) { fclose(s_f); s_f = NULL; }
+    make_path_locked();
+    s_f = fopen(s_path, "a");
+    s_written_in_file = 0;
+    if (!s_f) {
+        ESP_LOGW(TAG, "fopen %s failed", s_path);
+    } else {
+        ESP_LOGI(TAG, "logging to %s", s_path);
+    }
+}
+
+static esp_err_t mount_fallback_fat(void)
+{
+    const esp_vfs_fat_mount_config_t mcfg = {
+        .format_if_mount_failed = true,
+        .max_files = 4,
+        .allocation_unit_size = 4096,
+    };
+    wl_handle_t wl = WL_INVALID_HANDLE;
+    esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl("/logs", "logs_fat", &mcfg, &wl);
+    if (err == ESP_OK) {
+        s_fallback_fat_mounted = true;
+        ESP_LOGI(TAG, "mounted fallback FAT at /logs");
+    } else {
+        ESP_LOGW(TAG, "fallback FAT mount failed: 0x%x", err);
+    }
+    return err;
+}
+
+esp_err_t sd_logger_init(const sd_logger_cfg_t *cfg)
+{
+    s_rotate_bytes = cfg->rotate_kb * 1024u;
+    s_lock = xSemaphoreCreateMutex();
+
+    s_ring = heap_caps_calloc(RING_BYTES, 1, MALLOC_CAP_INTERNAL);
+    if (!s_ring) return ESP_ERR_NO_MEM;
+
+    if (cfg->sd_enabled) {
+        if (bsp_sdcard_mount() == ESP_OK) {
+            s_sd_mounted = true;
+            ESP_LOGI(TAG, "SD mounted at %s", BSP_SD_MOUNT_POINT);
+        } else {
+            ESP_LOGW(TAG, "SD not present; using internal fallback FAT");
+            mount_fallback_fat();
+        }
+    } else {
+        mount_fallback_fat();
+    }
+
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    reopen_locked();
+    xSemaphoreGive(s_lock);
+    return ESP_OK;
+}
+
+bool sd_logger_is_sd_mounted(void)
+{
+    return s_sd_mounted;
+}
+
+static void ring_push(const char *line)
+{
+    size_t L = strnlen(line, RING_LINE_BYTES - 1);
+    char *slot = &s_ring[(s_ring_head % RING_LINES) * RING_LINE_BYTES];
+    memcpy(slot, line, L);
+    slot[L] = 0;
+    s_ring_head = (s_ring_head + 1) % RING_LINES;
+    if (s_ring_count < RING_LINES) s_ring_count++;
+}
+
+static int format_timestamp(char *buf, size_t max)
+{
+    if (network_is_ntp_synced()) {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        struct tm tmv;
+        gmtime_r(&tv.tv_sec, &tmv);
+        int n = strftime(buf, max, "%Y-%m-%dT%H:%M:%S", &tmv);
+        int m = snprintf(buf + n, max - n, ".%03ldZ", tv.tv_usec / 1000);
+        return n + m;
+    } else {
+        uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
+        return snprintf(buf, max, "up=%us,NOT_SYNCED", (unsigned)up);
+    }
+}
+
+void sd_logger_event(const char *event, float cry_conf, int32_t latency_ms)
+{
+    cry_metrics_t m;
+    metrics_snapshot(&m);
+
+    char ts[48];
+    format_timestamp(ts, sizeof(ts));
+
+    char line[RING_LINE_BYTES];
+    int n = snprintf(line, sizeof(line),
+        "%s,%s,%.3f,%d,%u,%d\n",
+        ts, event, (double)cry_conf, (int)latency_ms,
+        (unsigned)m.free_heap, (int)m.wifi_rssi);
+    if (n <= 0) return;
+
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    ring_push(line);
+    if (s_f) {
+        fwrite(line, 1, n, s_f);
+        s_written_in_file += n;
+        s_total_written += n;
+        if (s_written_in_file >= s_rotate_bytes) {
+            reopen_locked();
+        } else if ((s_total_written & 0x3FF) == 0) {
+            fflush(s_f);
+        }
+    }
+    xSemaphoreGive(s_lock);
+}
+
+size_t sd_logger_tail(char *dst, size_t dst_max, uint32_t lines)
+{
+    if (lines > RING_LINES) lines = RING_LINES;
+    if (lines > s_ring_count) lines = s_ring_count;
+
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    uint32_t start = (s_ring_head + RING_LINES - lines) % RING_LINES;
+    size_t written = 0;
+    for (uint32_t i = 0; i < lines; ++i) {
+        const char *src = &s_ring[((start + i) % RING_LINES) * RING_LINE_BYTES];
+        size_t L = strnlen(src, RING_LINE_BYTES);
+        if (written + L + 1 > dst_max) break;
+        memcpy(dst + written, src, L);
+        written += L;
+    }
+    xSemaphoreGive(s_lock);
+    return written;
+}
