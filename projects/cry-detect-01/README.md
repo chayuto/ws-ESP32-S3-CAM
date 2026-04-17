@@ -63,9 +63,32 @@ Offline fallback: red LED on CH32V003 P6 (active-LOW).
 - **SD card**: if present and `CONFIG_CRY_DETECT_SD_ENABLED=y`, rotating CSV log at `/sdcard/cry-YYYYMMDD.log`.
 - **Fallback**: internal `logs_fat` partition mounted at `/logs` if SD absent.
 - **Ring buffer**: last ~80 lines in RAM, served by `GET /log/tail`.
-- **Format**: `ISO8601,event,cry_conf,latency_ms,free_heap,rssi`.
+- **Format (v3)**: `wallclock,uptime_s,event,cry_conf,max_cry_conf_1s,rms,nf_p95,nf_warm,latency_ms,inference_count,inference_fps,free_heap,free_psram,rssi,state,<20× watched_conf>`.
+- **Timestamp**: RFC 3339 local time with numeric offset — e.g. `2026-04-18T08:13:53.726+10:00`. Timezone is Sydney AEST/AEDT (`AEST-10AEDT,M10.1.0,M4.1.0/3`) set at boot; change via `setenv("TZ", ...)` in `network.c`.
 
 Pre-NTP lines are stamped with uptime-seconds and flagged `NOT_SYNCED`; they become queryable by wall-clock once NTP lands (historical lines are not rewritten).
+
+## Remote file access (Stage 2.7)
+
+Enabled by default. Whitelisted roots: `/sdcard`, `/logs`, `/yamnet`. Path traversal (`..`) is rejected.
+
+| Method | Endpoint | Example |
+|---|---|---|
+| `GET` | `/files/df` | `curl http://cry-detect-01.local/files/df` |
+| `GET` | `/files/ls?path=<dir>` | `curl 'http://.../files/ls?path=/sdcard'` |
+| `GET` | `/files/stat?path=<file>` | size, mtime, is_dir |
+| `GET` | `/files/get?path=<file>` | chunked streaming download |
+| `GET` | `/files/head?path=<file>&bytes=N` | first N bytes (max 1 MiB) |
+| `GET` | `/files/tail?path=<file>&bytes=N` | last N bytes (max 1 MiB) |
+| `DELETE` | `/files/rm?path=<file>` | refuses the currently-open log file |
+
+Pull the day's log without removing the SD card:
+```zsh
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+mkdir -p logs/cry-detect-01-export-${TS}
+curl -s "http://cry-detect-01.local/files/get?path=/sdcard/cry-$(date +%Y%m%d).log" \
+  -o logs/cry-detect-01-export-${TS}/cry-today.log
+```
 
 ## Tuning knobs
 

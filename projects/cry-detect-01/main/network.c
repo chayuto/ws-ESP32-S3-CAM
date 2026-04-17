@@ -45,7 +45,9 @@ static void on_ip_event(void *arg, esp_event_base_t base, int32_t id, void *data
         esp_sntp_setservername(1, "time.google.com");
         sntp_set_time_sync_notification_cb(on_time_sync);
         esp_sntp_init();
-        setenv("TZ", "UTC0", 1);
+        /* Australia/Sydney — POSIX TZ with AEST/AEDT rules. No tzdata file
+         * needed on the device; the POSIX string is self-describing. */
+        setenv("TZ", "AEST-10AEDT,M10.1.0,M4.1.0/3", 1);
         tzset();
         if (s_cb) s_cb(s_wifi_up, s_ntp_synced, s_ctx);
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {

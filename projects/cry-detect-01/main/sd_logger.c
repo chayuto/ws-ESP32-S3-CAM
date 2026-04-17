@@ -125,6 +125,11 @@ bool sd_logger_is_sd_mounted(void)
     return s_sd_mounted;
 }
 
+const char *sd_logger_current_path(void)
+{
+    return s_f ? s_path : NULL;
+}
+
 static void ring_push(const char *line)
 {
     size_t L = strnlen(line, RING_LINE_BYTES - 1);
@@ -141,9 +146,20 @@ static int format_timestamp(char *buf, size_t max)
         struct timeval tv;
         gettimeofday(&tv, NULL);
         struct tm tmv;
-        gmtime_r(&tv.tv_sec, &tmv);
+        localtime_r(&tv.tv_sec, &tmv);
         int n = strftime(buf, max, "%Y-%m-%dT%H:%M:%S", &tmv);
-        int m = snprintf(buf + n, max - n, ".%03ldZ", tv.tv_usec / 1000);
+        /* ISO-8601 local time with numeric offset (e.g. +11:00 AEDT / +10:00 AEST).
+         * Output: 2026-04-18T08:15:42.123+11:00 */
+        int m = snprintf(buf + n, max - n, ".%03ld", tv.tv_usec / 1000);
+        n += m;
+        m = strftime(buf + n, max - n, "%z", &tmv);  /* -> +1100 */
+        /* insert ':' to make "+11:00" (proper RFC 3339) */
+        if (m == 5 && (buf[n] == '+' || buf[n] == '-') && (size_t)(n + 7) < max) {
+            memmove(buf + n + 4, buf + n + 3, 2);
+            buf[n + 3] = ':';
+            m++;
+            buf[n + m] = '\0';  /* memmove clobbered the NUL */
+        }
         return n + m;
     } else {
         uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);

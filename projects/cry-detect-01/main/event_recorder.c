@@ -74,9 +74,10 @@ static void make_filename(char *out, size_t max, const char *prefix, const char 
     time_t now = time(NULL);
     if (network_is_ntp_synced()) {
         struct tm tmv;
-        gmtime_r(&now, &tmv);
+        localtime_r(&now, &tmv);
         char ts[32];
-        strftime(ts, sizeof(ts), "%Y%m%dT%H%M%SZ", &tmv);
+        /* Local time, compact for filenames: 20260418T081542+1100 */
+        strftime(ts, sizeof(ts), "%Y%m%dT%H%M%S%z", &tmv);
         snprintf(out, max, "%s/%s/cry-%s.wav", prefix, subdir, ts);
     } else {
         snprintf(out, max, "%s/%s/cry-boot%u.wav", prefix, subdir, (unsigned)(now & 0xffff));

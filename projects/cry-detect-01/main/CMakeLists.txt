@@ -13,6 +13,7 @@ idf_component_register(
         "web_ui.c"
         "event_recorder.c"
         "noise_floor.c"
+        "file_api.c"
     INCLUDE_DIRS
         "."
     EMBED_TXTFILES

@@ -11,6 +11,11 @@ typedef struct {
 esp_err_t sd_logger_init(const sd_logger_cfg_t *cfg);
 bool sd_logger_is_sd_mounted(void);
 
+/* Returns the path to the currently open log file, or NULL if not open.
+ * Stable pointer into internal storage; do not free. Not thread-safe
+ * against concurrent reopen_locked, but good enough for UI/debug use. */
+const char *sd_logger_current_path(void);
+
 /* Single-line CSV event. Columns (stable):
  *   wallclock,uptime_s,event,cry_conf,input_rms,noise_p95,latency_ms,free_heap,rssi,state
  * wallclock is ISO-8601 UTC if NTP synced else "NOT_SYNCED".

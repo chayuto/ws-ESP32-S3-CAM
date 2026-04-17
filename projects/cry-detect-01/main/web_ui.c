@@ -14,6 +14,7 @@
 
 #include "sd_logger.h"
 #include "led_alert.h"
+#include "file_api.h"
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
 #include "audio_stream.h"
@@ -194,7 +195,7 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
     s_lock = xSemaphoreCreateMutex();
 
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-    cfg.max_uri_handlers = 12;
+    cfg.max_uri_handlers = 24;
     cfg.stack_size = 6144;
     cfg.lru_purge_enable = true;
     cfg.uri_match_fn = httpd_uri_match_wildcard;
@@ -216,6 +217,21 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
     httpd_register_uri_handler(s_server, &h_log);
     httpd_register_uri_handler(s_server, &h_health);
     httpd_register_uri_handler(s_server, &h_led);
+
+    httpd_uri_t h_ls   = { .uri = "/files/ls",   .method = HTTP_GET,    .handler = file_api_ls   };
+    httpd_uri_t h_get  = { .uri = "/files/get",  .method = HTTP_GET,    .handler = file_api_get  };
+    httpd_uri_t h_head = { .uri = "/files/head", .method = HTTP_GET,    .handler = file_api_head };
+    httpd_uri_t h_tail = { .uri = "/files/tail", .method = HTTP_GET,    .handler = file_api_tail };
+    httpd_uri_t h_stat = { .uri = "/files/stat", .method = HTTP_GET,    .handler = file_api_stat };
+    httpd_uri_t h_df   = { .uri = "/files/df",   .method = HTTP_GET,    .handler = file_api_df   };
+    httpd_uri_t h_rm   = { .uri = "/files/rm",   .method = HTTP_DELETE, .handler = file_api_rm   };
+    httpd_register_uri_handler(s_server, &h_ls);
+    httpd_register_uri_handler(s_server, &h_get);
+    httpd_register_uri_handler(s_server, &h_head);
+    httpd_register_uri_handler(s_server, &h_tail);
+    httpd_register_uri_handler(s_server, &h_stat);
+    httpd_register_uri_handler(s_server, &h_df);
+    httpd_register_uri_handler(s_server, &h_rm);
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
     httpd_uri_t h_stream = { .uri = "/audio.pcm", .method = HTTP_GET, .handler = audio_stream_http_handler };
