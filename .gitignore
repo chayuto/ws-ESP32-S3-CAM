@@ -1,0 +1,21 @@
+# Reference material downloaded from vendor (too large / licensed)
+/ref/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# ESP-IDF build artifacts
+build/
+sdkconfig.old
+dependencies.lock
+managed_components/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
