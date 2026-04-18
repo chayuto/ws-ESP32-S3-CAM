@@ -20,6 +20,16 @@ esp_err_t event_recorder_init(const event_recorder_cfg_t *cfg);
  * the web UI log. Returns NULL if a recording is already in flight. */
 const char *event_recorder_trigger(float cry_conf);
 
+/* Manually trigger a recording for training-data collection. Same as
+ * event_recorder_trigger(1.0f) but also appends a JSON entry to
+ * <events>/triggers.jsonl with the timestamp, note, and RMS snapshot so
+ * each manual trigger is labeled for downstream retraining. Returns true
+ * if the trigger was accepted, false if already recording. */
+bool event_recorder_trigger_manual(const char *note);
+
+/* Events directory on disk (e.g. "/sdcard/events"). */
+const char *event_recorder_dir(void);
+
 /* Serve files under /recordings. */
 esp_err_t event_recorder_http_handler(httpd_req_t *req);
 

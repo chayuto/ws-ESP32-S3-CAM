@@ -19,6 +19,7 @@
 #include "audio_capture.h"
 #include "network.h"
 #include "breadcrumb.h"
+#include "metrics.h"
 
 static const char *TAG = "rec";
 
@@ -281,6 +282,56 @@ const char *event_recorder_trigger(float cry_conf)
 bool event_recorder_is_recording(void)
 {
     return s_recording;
+}
+
+const char *event_recorder_dir(void)
+{
+    return s_event_dir;
+}
+
+bool event_recorder_trigger_manual(const char *note)
+{
+    if (s_recording) return false;
+
+    /* Write a label entry BEFORE triggering so the jsonl entry timestamps
+     * align with when the user pressed the button. The WAV filename gets
+     * assigned a fraction of a second later by the recorder task; match by
+     * wallclock on analysis. */
+    char path[72];
+    snprintf(path, sizeof(path), "%s/triggers.jsonl", s_event_dir);
+    FILE *f = fopen(path, "a");
+    if (f) {
+        char ts[48];
+        if (network_is_ntp_synced()) {
+            struct timeval tv; gettimeofday(&tv, NULL);
+            struct tm tmv; localtime_r(&tv.tv_sec, &tmv);
+            int n = strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", &tmv);
+            snprintf(ts + n, sizeof(ts) - n, ".%03ld", tv.tv_usec / 1000);
+        } else {
+            snprintf(ts, sizeof(ts), "up=%us",
+                     (unsigned)(esp_timer_get_time() / 1000000));
+        }
+        cry_metrics_t m;
+        metrics_snapshot(&m);
+        fprintf(f, "{\"ts\":\"%s\",\"note\":\"%.96s\",\"rms\":%.1f,"
+                   "\"cry_conf\":%.3f,\"state\":%d}\n",
+                ts, note ? note : "", (double)m.input_rms,
+                (double)m.last_cry_conf, (int)m.state);
+        fflush(f);
+        fsync(fileno(f));
+        fclose(f);
+        ESP_LOGI(TAG, "manual trigger note=\"%.32s\" logged", note ? note : "");
+    } else {
+        metrics_increment_sd_write_error();
+        ESP_LOGW(TAG, "triggers.jsonl fopen failed at %s", path);
+    }
+
+    /* Fire the recording with a synthetic conf = 1.0 so retention logic
+     * treats it as high-confidence — we're labeling it ground-truth.
+     * event_recorder_trigger returns a stale previous-path pointer; we
+     * don't use it. The s_recording==false check above means we accepted. */
+    (void)event_recorder_trigger(1.0f);
+    return true;
 }
 
 esp_err_t event_recorder_http_handler(httpd_req_t *req)
