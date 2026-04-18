@@ -30,3 +30,6 @@ __pycache__/
 .venv/
 venv/
 /logs/
+
+# Claude Code runtime state
+.claude/scheduled_tasks.lock
