@@ -70,7 +70,7 @@ static esp_err_t handler_app_js(httpd_req_t *req)
 
 static esp_err_t handler_metrics(httpd_req_t *req)
 {
-    char buf[768];
+    char buf[2048];
     size_t n = metrics_to_json(buf, sizeof(buf));
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, buf, n);
@@ -263,7 +263,7 @@ static esp_err_t handler_events(httpd_req_t *req)
     send_raw(fd, hdr, strlen(hdr));
 
     /* Initial snapshot to let the page render. */
-    char buf[768];
+    char buf[2048];
     int n = snprintf(buf, sizeof(buf), "event: snapshot\ndata: ");
     n += metrics_to_json(buf + n, sizeof(buf) - n);
     n += snprintf(buf + n, sizeof(buf) - n, "\n\n");
