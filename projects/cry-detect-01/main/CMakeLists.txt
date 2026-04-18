@@ -15,6 +15,7 @@ idf_component_register(
         "noise_floor.c"
         "file_api.c"
         "metrics_logger.c"
+        "breadcrumb.c"
     INCLUDE_DIRS
         "."
     EMBED_TXTFILES
@@ -36,4 +37,6 @@ idf_component_register(
         driver
         protocol_examples_common
         mdns
+        espcoredump
+        esp_partition
 )

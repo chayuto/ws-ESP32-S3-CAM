@@ -14,6 +14,8 @@
 
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_core_dump.h"
+#include "esp_partition.h"
 
 #include "sd_logger.h"
 
@@ -264,4 +266,75 @@ esp_err_t file_api_df(httpd_req_t *req)
     httpd_resp_send_chunk(req, "}", 1);
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
+}
+
+/* ---- /files/coredump* ---- */
+
+static const esp_partition_t *coredump_partition(void)
+{
+    return esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
+                                    ESP_PARTITION_SUBTYPE_DATA_COREDUMP,
+                                    NULL);
+}
+
+esp_err_t file_api_coredump_info(httpd_req_t *req)
+{
+    size_t addr = 0, size = 0;
+    esp_err_t rc = esp_core_dump_image_get(&addr, &size);
+    bool present = (rc == ESP_OK && size > 0);
+
+    char body[160];
+    int n = snprintf(body, sizeof(body),
+        "{\"present\":%s,\"size\":%u,\"addr\":%u,\"check\":\"0x%x\"}",
+        present ? "true" : "false",
+        (unsigned)size, (unsigned)addr, (unsigned)rc);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, body, n);
+}
+
+esp_err_t file_api_coredump_get(httpd_req_t *req)
+{
+    size_t addr = 0, size = 0;
+    if (esp_core_dump_image_get(&addr, &size) != ESP_OK || size == 0) {
+        return fail(req, "404 Not Found", "no coredump present");
+    }
+    const esp_partition_t *p = coredump_partition();
+    if (!p) return fail(req, "500 Internal Server Error", "no coredump partition");
+    if (addr < p->address || addr + size > p->address + p->size) {
+        return fail(req, "500 Internal Server Error", "coredump address out of partition");
+    }
+    size_t offset = addr - p->address;
+
+    httpd_resp_set_type(req, "application/octet-stream");
+    httpd_resp_set_hdr(req, "Content-Disposition",
+                       "attachment; filename=\"cry-detect-01-coredump.elf\"");
+
+    size_t chunk_sz = 4096;
+    uint8_t *buf = heap_caps_malloc(chunk_sz, MALLOC_CAP_SPIRAM);
+    if (!buf) return fail(req, "503 Service Unavailable", "no heap");
+
+    esp_err_t rc = ESP_OK;
+    size_t remaining = size;
+    while (remaining > 0 && rc == ESP_OK) {
+        size_t to_read = remaining > chunk_sz ? chunk_sz : remaining;
+        if (esp_partition_read(p, offset, buf, to_read) != ESP_OK) { rc = ESP_FAIL; break; }
+        if (httpd_resp_send_chunk(req, (char *)buf, to_read) != ESP_OK) { rc = ESP_FAIL; break; }
+        offset += to_read;
+        remaining -= to_read;
+    }
+    free(buf);
+    if (rc == ESP_OK) httpd_resp_send_chunk(req, NULL, 0);
+    ESP_LOGI(TAG, "coredump stream: size=%u rc=0x%x", (unsigned)size, rc);
+    return rc;
+}
+
+esp_err_t file_api_coredump_erase(httpd_req_t *req)
+{
+    esp_err_t rc = esp_core_dump_image_erase();
+    char body[64];
+    int n = snprintf(body, sizeof(body), "{\"erased\":%s,\"rc\":\"0x%x\"}",
+                     rc == ESP_OK ? "true" : "false", (unsigned)rc);
+    httpd_resp_set_type(req, "application/json");
+    ESP_LOGI(TAG, "coredump erase rc=0x%x", rc);
+    return httpd_resp_send(req, body, n);
 }

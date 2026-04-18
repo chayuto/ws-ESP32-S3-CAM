@@ -15,6 +15,7 @@
 #include "sd_logger.h"
 #include "led_alert.h"
 #include "file_api.h"
+#include "breadcrumb.h"
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
 #include "audio_stream.h"
@@ -75,6 +76,44 @@ static esp_err_t handler_metrics(httpd_req_t *req)
 static esp_err_t handler_healthz(httpd_req_t *req)
 {
     return httpd_resp_send(req, "OK", 2);
+}
+
+/* /status — breadcrumb + boot counter + previous-boot state (P2 #23).
+ * If the previous boot crashed silently (brown-out, WDT, assert before
+ * coredump init), `prev_boot.stage` tells you *where* it died. */
+static esp_err_t handler_status(httpd_req_t *req)
+{
+    char buf[512];
+    size_t n = breadcrumb_status_json(buf, sizeof(buf));
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, buf, n);
+}
+
+/* P2 #22: runtime log-level control. GET /log/level?tag=X&level=debug
+ * Levels: none, error, warn, info, debug, verbose.  tag "*" hits everything. */
+static esp_err_t handler_log_level(httpd_req_t *req)
+{
+    char qbuf[128];
+    char tag[32] = "*";
+    char lvl[16] = "info";
+    if (httpd_req_get_url_query_str(req, qbuf, sizeof(qbuf)) == ESP_OK) {
+        httpd_query_key_value(qbuf, "tag", tag, sizeof(tag));
+        httpd_query_key_value(qbuf, "level", lvl, sizeof(lvl));
+    }
+    esp_log_level_t target = ESP_LOG_INFO;
+    if      (!strcasecmp(lvl, "none"))    target = ESP_LOG_NONE;
+    else if (!strcasecmp(lvl, "error"))   target = ESP_LOG_ERROR;
+    else if (!strcasecmp(lvl, "warn"))    target = ESP_LOG_WARN;
+    else if (!strcasecmp(lvl, "info"))    target = ESP_LOG_INFO;
+    else if (!strcasecmp(lvl, "debug"))   target = ESP_LOG_DEBUG;
+    else if (!strcasecmp(lvl, "verbose")) target = ESP_LOG_VERBOSE;
+    esp_log_level_set(tag, target);
+    char resp[96];
+    int n = snprintf(resp, sizeof(resp),
+                     "{\"tag\":\"%s\",\"level\":\"%s\"}", tag, lvl);
+    httpd_resp_set_type(req, "application/json");
+    ESP_LOGI(TAG, "log_level tag=%s level=%s", tag, lvl);
+    return httpd_resp_send(req, resp, n);
 }
 
 static esp_err_t handler_led_brightness(httpd_req_t *req)
@@ -195,7 +234,7 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
     s_lock = xSemaphoreCreateMutex();
 
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-    cfg.max_uri_handlers = 24;
+    cfg.max_uri_handlers = 32;
     cfg.stack_size = 6144;
     cfg.lru_purge_enable = true;
     cfg.uri_match_fn = httpd_uri_match_wildcard;
@@ -210,6 +249,8 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
     httpd_uri_t h_log     = { .uri = "/log/tail",.method = HTTP_GET, .handler = handler_log_tail };
     httpd_uri_t h_health  = { .uri = "/healthz", .method = HTTP_GET, .handler = handler_healthz };
     httpd_uri_t h_led     = { .uri = "/led/brightness", .method = HTTP_GET, .handler = handler_led_brightness };
+    httpd_uri_t h_loglvl  = { .uri = "/log/level",      .method = HTTP_GET, .handler = handler_log_level };
+    httpd_uri_t h_status  = { .uri = "/status",         .method = HTTP_GET, .handler = handler_status };
     httpd_register_uri_handler(s_server, &h_index);
     httpd_register_uri_handler(s_server, &h_js);
     httpd_register_uri_handler(s_server, &h_metrics);
@@ -217,6 +258,8 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
     httpd_register_uri_handler(s_server, &h_log);
     httpd_register_uri_handler(s_server, &h_health);
     httpd_register_uri_handler(s_server, &h_led);
+    httpd_register_uri_handler(s_server, &h_loglvl);
+    httpd_register_uri_handler(s_server, &h_status);
 
     httpd_uri_t h_ls   = { .uri = "/files/ls",   .method = HTTP_GET,    .handler = file_api_ls   };
     httpd_uri_t h_get  = { .uri = "/files/get",  .method = HTTP_GET,    .handler = file_api_get  };
@@ -225,6 +268,9 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
     httpd_uri_t h_stat = { .uri = "/files/stat", .method = HTTP_GET,    .handler = file_api_stat };
     httpd_uri_t h_df   = { .uri = "/files/df",   .method = HTTP_GET,    .handler = file_api_df   };
     httpd_uri_t h_rm   = { .uri = "/files/rm",   .method = HTTP_DELETE, .handler = file_api_rm   };
+    httpd_uri_t h_cdi  = { .uri = "/files/coredump/info", .method = HTTP_GET,    .handler = file_api_coredump_info };
+    httpd_uri_t h_cdg  = { .uri = "/files/coredump",      .method = HTTP_GET,    .handler = file_api_coredump_get  };
+    httpd_uri_t h_cde  = { .uri = "/files/coredump",      .method = HTTP_DELETE, .handler = file_api_coredump_erase };
     httpd_register_uri_handler(s_server, &h_ls);
     httpd_register_uri_handler(s_server, &h_get);
     httpd_register_uri_handler(s_server, &h_head);
@@ -232,6 +278,9 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
     httpd_register_uri_handler(s_server, &h_stat);
     httpd_register_uri_handler(s_server, &h_df);
     httpd_register_uri_handler(s_server, &h_rm);
+    httpd_register_uri_handler(s_server, &h_cdi);
+    httpd_register_uri_handler(s_server, &h_cdg);
+    httpd_register_uri_handler(s_server, &h_cde);
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
     httpd_uri_t h_stream = { .uri = "/audio.pcm", .method = HTTP_GET, .handler = audio_stream_http_handler };

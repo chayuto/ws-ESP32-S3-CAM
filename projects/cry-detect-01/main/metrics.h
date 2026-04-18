@@ -43,6 +43,7 @@ typedef struct {
     float input_rms;
     uint32_t sse_clients;
     uint32_t log_bytes_written;
+    uint32_t sd_write_errors;           /* fwrite/fopen/fsync failures — visible in UI */
 
     float watched_conf[CRY_WATCHED_N];
 } cry_metrics_t;
@@ -57,6 +58,7 @@ void metrics_set_wifi(bool connected, int8_t rssi);
 void metrics_set_sd_mounted(bool v);
 void metrics_refresh_system(void);
 void metrics_update_watched(const float *watched_confs, int n);
+void metrics_increment_sd_write_error(void);
 void metrics_snapshot(cry_metrics_t *out);
 
 typedef void (*metrics_event_cb_t)(const cry_metrics_t *snap, void *ctx);

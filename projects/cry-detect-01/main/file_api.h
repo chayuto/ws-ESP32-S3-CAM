@@ -17,3 +17,9 @@ esp_err_t file_api_tail(httpd_req_t *req);   /* GET  /files/tail?path=...&bytes=
 esp_err_t file_api_stat(httpd_req_t *req);   /* GET  /files/stat?path=...[&hash=1] */
 esp_err_t file_api_rm(httpd_req_t *req);     /* DELETE /files/rm?path=... (via GET method OK too) */
 esp_err_t file_api_df(httpd_req_t *req);     /* GET  /files/df */
+
+/* Core-dump access (separate from SD filesystem — reads the coredump
+ * flash partition directly via esp_partition_read). */
+esp_err_t file_api_coredump_info(httpd_req_t *req);   /* GET /files/coredump/info → JSON {"present":true,"size":N} */
+esp_err_t file_api_coredump_get(httpd_req_t *req);    /* GET /files/coredump → streams ELF */
+esp_err_t file_api_coredump_erase(httpd_req_t *req);  /* DELETE /files/coredump → erase after fetch */

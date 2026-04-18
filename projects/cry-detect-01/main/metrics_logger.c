@@ -40,6 +40,7 @@ static uint32_t s_last_seq;          /* monotonic publish counter */
 static FILE *s_f;
 static char  s_path[64];
 static int   s_day_of_year;
+static bool  s_last_ntp_synced;      /* tracks false→true edge so we reopen at sync */
 static const char *s_mount_prefix;   /* /sdcard or /logs */
 
 static temperature_sensor_handle_t s_tsens;
@@ -103,15 +104,24 @@ static void reopen_if_needed(void)
     struct tm tmv;
     time_t now = time(NULL);
     localtime_r(&now, &tmv);
+    bool ntp = network_is_ntp_synced();
 
-    bool need = (s_f == NULL) || (network_is_ntp_synced() && tmv.tm_yday != s_day_of_year);
+    /* Three triggers for reopen:
+     *   1. no file yet (cold start)
+     *   2. NTP just flipped false→true (move from infer-boot → infer-YYYYMMDD)
+     *   3. NTP synced and the day number changed (midnight rollover) */
+    bool need = (s_f == NULL)
+             || (ntp && !s_last_ntp_synced)
+             || (ntp && tmv.tm_yday != s_day_of_year);
     if (!need) return;
 
     if (s_f) { fclose(s_f); s_f = NULL; }
     make_path(s_path, sizeof(s_path));
     s_f = fopen(s_path, "a");
     s_day_of_year = tmv.tm_yday;
+    s_last_ntp_synced = ntp;
     if (!s_f) {
+        metrics_increment_sd_write_error();
         ESP_LOGW(TAG, "fopen %s failed", s_path);
     } else {
         ESP_LOGI(TAG, "jsonl logging to %s", s_path);
@@ -216,14 +226,15 @@ static void write_row(FILE *f)
     n += snprintf(buf + n, sizeof(buf) - n,
         ",\"sys\":{\"free_heap\":%u,\"free_psram\":%u,"
         "\"min_heap\":%u,\"rssi\":%d,\"die_c\":%.1f,"
-        "\"ntp\":%s,\"wifi\":%s,\"sd\":%s,\"alerts\":%u}",
+        "\"ntp\":%s,\"wifi\":%s,\"sd\":%s,\"alerts\":%u,\"sd_err\":%u}",
         (unsigned)m.free_heap, (unsigned)m.free_psram,
         (unsigned)esp_get_minimum_free_heap_size(),
         (int)m.wifi_rssi, (double)die_c,
         m.ntp_synced ? "true" : "false",
         m.wifi_connected ? "true" : "false",
         m.sd_mounted ? "true" : "false",
-        (unsigned)m.alert_count);
+        (unsigned)m.alert_count,
+        (unsigned)m.sd_write_errors);
 
     /* Stack HWM per task — uses uxTaskGetSystemState (trace facility). */
 #if (configUSE_TRACE_FACILITY == 1)
@@ -250,8 +261,21 @@ static void write_row(FILE *f)
 
     n += snprintf(buf + n, sizeof(buf) - n, "}\n");
 
-    if (n > 0 && n < (int)sizeof(buf) && f) {
-        fwrite(buf, 1, n, f);
+    /* Detect silent truncation before we commit the row (audit P3 #27).
+     * snprintf returns the length it *would* have written. If that exceeds
+     * our buffer, log it and don't write a half-row JSON. */
+    if (n >= (int)sizeof(buf)) {
+        metrics_increment_sd_write_error();
+        ESP_LOGW(TAG, "jsonl row truncated (n=%d, cap=%d) — widen buf", n, (int)sizeof(buf));
+        return;
+    }
+
+    if (n > 0 && f) {
+        size_t w = fwrite(buf, 1, n, f);
+        if (w != (size_t)n) {
+            metrics_increment_sd_write_error();
+            ESP_LOGW(TAG, "fwrite short (%u/%d)", (unsigned)w, n);
+        }
     }
 }
 
@@ -271,8 +295,10 @@ static void logger_task(void *arg)
              * to SD. Without fsync, a crash loses every row since the last
              * fclose, which only happens at day rollover. */
             if (++ticks % 10 == 0) {
-                fflush(s_f);
-                fsync(fileno(s_f));
+                if (fflush(s_f) != 0 || fsync(fileno(s_f)) != 0) {
+                    metrics_increment_sd_write_error();
+                    ESP_LOGW(TAG, "fflush/fsync failed on %s", s_path);
+                }
             }
         }
     }

@@ -21,6 +21,7 @@
 #include "web_ui.h"
 #include "noise_floor.h"
 #include "metrics_logger.h"
+#include "breadcrumb.h"
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
@@ -256,12 +257,15 @@ static void housekeeping_task(void *arg)
                 switch (e) {
                     case DEFERRED_LOG_WIFI_UP:
                         sd_logger_event("wifi_up", 0.0f, 0);
+                        breadcrumb_set("wifi_up");
                         break;
                     case DEFERRED_LOG_WIFI_DOWN:
                         sd_logger_event("wifi_down", 0.0f, 0);
+                        breadcrumb_set("wifi_down");
                         break;
                     case DEFERRED_LOG_NTP_SYNCED:
                         sd_logger_ntp_sync_marker();
+                        breadcrumb_set("ntp_synced");
                         break;
                 }
             }
@@ -301,6 +305,10 @@ void app_main(void)
 
     ESP_ERROR_CHECK(nvs_flash_init());
 
+    /* Read previous-boot breadcrumb BEFORE anything else can crash us.
+     * If the last boot died during e.g. yamnet init, we'll see it here. */
+    breadcrumb_init();
+
     metrics_init();
 
     ESP_ERROR_CHECK(led_alert_init(CONFIG_CRY_DETECT_LED_EXPANDER_PIN));
@@ -314,8 +322,10 @@ void app_main(void)
     sd_logger_init(&lg);
     metrics_set_sd_mounted(sd_logger_is_sd_mounted());
     sd_logger_event("boot", 0.0f, 0);
+    breadcrumb_set("sd_mounted");
 
     ESP_ERROR_CHECK(mount_yamnet_spiffs());
+    breadcrumb_set("spiffs_mounted");
 
     esp_err_t merr = yamnet_init(CONFIG_CRY_DETECT_MODEL_PATH, CONFIG_CRY_DETECT_TENSOR_ARENA_KB);
     s_yamnet_up = (merr == ESP_OK);
@@ -327,6 +337,7 @@ void app_main(void)
 
     ESP_ERROR_CHECK(mel_features_init());
     ESP_ERROR_CHECK(audio_capture_init(CONFIG_CRY_DETECT_SAMPLE_RATE, CONFIG_CRY_DETECT_MIC_GAIN_DB));
+    breadcrumb_set("audio_up");
 
     detector_init(0.65f, CONFIG_CRY_DETECT_CONSEC_FRAMES, CONFIG_CRY_DETECT_HOLD_MS,
                   on_detector_state, NULL);
@@ -335,7 +346,10 @@ void app_main(void)
     ESP_ERROR_CHECK(noise_floor_init(CONFIG_CRY_NOISE_FLOOR_WARMUP_S,
                                      (float)CONFIG_CRY_NOISE_FLOOR_MARGIN_X100 / 100.0f));
 #endif
-    xTaskCreatePinnedToCore(housekeeping_task, "hk", 6 * 1024, NULL, 2, NULL, 0);
+    /* 8 KB stack: hk now drains the deferred-log queue (which calls
+     * sd_logger_ntp_sync_marker → fopen/fwrite/fclose) on top of the
+     * existing metrics/noise_floor hot path. Audit P1 #17. */
+    xTaskCreatePinnedToCore(housekeeping_task, "hk", 8 * 1024, NULL, 2, NULL, 0);
 
     /* Verbose 1 Hz classification logger (Stage 2.6a). Runs in parallel
      * with sd_logger's CSV — JSONL is for analysis/retraining, CSV stays
@@ -387,5 +401,6 @@ void app_main(void)
     if (s_yamnet_up) {
         led_alert_set(LED_STATE_IDLE);
     }  /* else LED stays in ERROR pattern set above */
+    breadcrumb_set(s_yamnet_up ? "run" : "run_infra_only");
     ESP_LOGI(TAG, "boot complete%s", s_yamnet_up ? "" : " (INFRA-ONLY)");
 }

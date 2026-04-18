@@ -14,9 +14,11 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
+#include "esp_timer.h"
 
 #include "audio_capture.h"
 #include "network.h"
+#include "breadcrumb.h"
 
 static const char *TAG = "rec";
 
@@ -72,6 +74,7 @@ static void wav_patch_sizes(FILE *f, uint32_t data_bytes)
 static void make_filename(char *out, size_t max, const char *prefix, const char *subdir)
 {
     time_t now = time(NULL);
+    (void)now;
     if (network_is_ntp_synced()) {
         struct tm tmv;
         localtime_r(&now, &tmv);
@@ -80,7 +83,12 @@ static void make_filename(char *out, size_t max, const char *prefix, const char 
         strftime(ts, sizeof(ts), "%Y%m%dT%H%M%S%z", &tmv);
         snprintf(out, max, "%s/%s/cry-%s.wav", prefix, subdir, ts);
     } else {
-        snprintf(out, max, "%s/%s/cry-boot%u.wav", prefix, subdir, (unsigned)(now & 0xffff));
+        /* Pre-NTP: use the shared breadcrumb boot counter + uptime so
+         * filenames stay unique across reboots and across multiple
+         * triggers in one boot (hygiene audit P0 #6). */
+        uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
+        snprintf(out, max, "%s/%s/cry-boot%04u-up%u.wav",
+                 prefix, subdir, (unsigned)breadcrumb_boot_counter(), (unsigned)up);
     }
 }
 
@@ -129,15 +137,20 @@ static void preroll_push(const int16_t *pcm, size_t n)
     }
 }
 
-static void preroll_flush_to_file(FILE *f)
+/* Returns true if all preroll samples were written; false on short write
+ * (caller should abort the recording). */
+static bool preroll_flush_to_file(FILE *f)
 {
     size_t start = (s_preroll_head + s_preroll_samples - s_preroll_filled) % s_preroll_samples;
     size_t first_run = s_preroll_samples - start;
     if (first_run > s_preroll_filled) first_run = s_preroll_filled;
-    fwrite(&s_preroll[start], sizeof(int16_t), first_run, f);
+    size_t w1 = fwrite(&s_preroll[start], sizeof(int16_t), first_run, f);
+    if (w1 != first_run) return false;
     if (first_run < s_preroll_filled) {
-        fwrite(s_preroll, sizeof(int16_t), s_preroll_filled - first_run, f);
+        size_t remaining = s_preroll_filled - first_run;
+        if (fwrite(s_preroll, sizeof(int16_t), remaining, f) != remaining) return false;
     }
+    return true;
 }
 
 static void recorder_task(void *arg)
@@ -181,14 +194,32 @@ static void recorder_task(void *arg)
                 continue;
             }
             wav_write_header(f, s_cfg.sample_rate);
-            preroll_flush_to_file(f);
+            if (!preroll_flush_to_file(f)) {
+                /* SD full / write error: abandon this recording cleanly
+                 * instead of leaving a stale FP around (P0 #5). */
+                ESP_LOGW(TAG, "preroll write short; abandoning recording");
+                fclose(f); f = NULL;
+                s_recording = false;
+                continue;
+            }
             recorded_samples = (uint32_t)s_preroll_filled;
             postroll_target = recorded_samples + s_cfg.postroll_s * s_cfg.sample_rate;
             ESP_LOGI(TAG, "recording to %s (conf=%.2f, preroll=%u samples)",
                      s_last_path, (double)s_trigger_conf, (unsigned)s_preroll_filled);
         }
 
-        fwrite(buf, sizeof(int16_t), got, f);
+        size_t written = fwrite(buf, sizeof(int16_t), got, f);
+        if (written != got) {
+            /* Partial write — close file and drop state atomically so next
+             * iteration opens a fresh one rather than reusing stale FP (P0 #5). */
+            ESP_LOGW(TAG, "fwrite short (%u/%u) — aborting this recording",
+                     (unsigned)written, (unsigned)got);
+            fclose(f); f = NULL;
+            recorded_samples = 0;
+            postroll_target = 0;
+            s_recording = false;
+            continue;
+        }
         recorded_samples += got;
         preroll_push(buf, got);
 
@@ -196,6 +227,8 @@ static void recorder_task(void *arg)
             uint32_t data_bytes = recorded_samples * sizeof(int16_t);
             wav_patch_sizes(f, data_bytes);
             fclose(f); f = NULL;
+            recorded_samples = 0;
+            postroll_target = 0;
             s_recording = false;
             ESP_LOGI(TAG, "record complete, bytes=%u", (unsigned)data_bytes);
 

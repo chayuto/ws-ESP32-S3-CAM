@@ -28,7 +28,9 @@
 static const char *TAG = "sdlog";
 
 #define RING_LINES       80
-#define RING_LINE_BYTES  448   /* v3 schema: v2 cols + CRY_WATCHED_N floats */
+/* v3 schema: ~280 chars typical. Raised from 448 to 640 after audit P1 #11
+ * flagged the older limit as tight against truncation with 20 watched floats. */
+#define RING_LINE_BYTES  640
 #define RING_BYTES       (RING_LINES * RING_LINE_BYTES)
 
 static char *s_ring;
@@ -73,6 +75,7 @@ static void reopen_locked(void)
     s_written_in_file = 0;
     s_last_flush_bytes = 0;
     if (!s_f) {
+        metrics_increment_sd_write_error();
         ESP_LOGW(TAG, "fopen %s failed", s_path);
     } else {
         ESP_LOGI(TAG, "logging to %s", s_path);
@@ -204,24 +207,40 @@ static void write_row_locked(const char *event, float cry_conf, int32_t latency_
         n += snprintf(line + n, sizeof(line) - n, ",%.3f",
                       (double)m->watched_conf[i]);
     }
-    if (n < (int)sizeof(line) - 2) {
-        line[n++] = '\n';
-        line[n]   = '\0';
+    /* Detect truncation: snprintf returns the length it WOULD have written.
+     * If that exceeds our buffer, widen RING_LINE_BYTES or drop columns. */
+    if (n >= (int)sizeof(line) - 2) {
+        metrics_increment_sd_write_error();
+        ESP_LOGW(TAG, "row truncated (n=%d, cap=%d) — widen RING_LINE_BYTES",
+                 n, (int)sizeof(line));
+        n = (int)sizeof(line) - 2;
     }
+    line[n++] = '\n';
+    line[n]   = '\0';
 
     ring_push(line);
     if (s_f) {
-        fwrite(line, 1, n, s_f);
-        s_written_in_file += n;
-        s_total_written += n;
+        size_t w = fwrite(line, 1, n, s_f);
+        if (w != (size_t)n) {
+            /* Short write = SD full or I/O error. Surface to metrics,
+             * close the handle so next write reopens + retries (P1 #14). */
+            metrics_increment_sd_write_error();
+            ESP_LOGW(TAG, "fwrite short (%u/%d) on %s", (unsigned)w, n, s_path);
+            fclose(s_f); s_f = NULL;
+            return;
+        }
+        s_written_in_file += w;
+        s_total_written += w;
         if (s_written_in_file >= s_rotate_bytes) {
             reopen_locked();
         } else if (s_written_in_file - s_last_flush_bytes >= 2048) {
             /* fflush alone leaves data in FATFS's cache; fsync pushes to SD.
              * Without fsync, a power loss / reboot loses everything since
              * the last fclose (which is every rotation or at NTP sync). */
-            fflush(s_f);
-            fsync(fileno(s_f));
+            if (fflush(s_f) != 0 || fsync(fileno(s_f)) != 0) {
+                metrics_increment_sd_write_error();
+                ESP_LOGW(TAG, "fflush/fsync failed on %s", s_path);
+            }
             s_last_flush_bytes = s_written_in_file;
         }
     }

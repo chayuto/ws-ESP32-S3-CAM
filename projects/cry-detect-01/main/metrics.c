@@ -175,6 +175,14 @@ void metrics_set_sd_mounted(bool v)
     xSemaphoreGive(s_lock);
 }
 
+void metrics_increment_sd_write_error(void)
+{
+    if (!s_lock) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_metrics.sd_write_errors++;
+    xSemaphoreGive(s_lock);
+}
+
 void metrics_update_watched(const float *confs, int n)
 {
     if (!confs) return;
@@ -260,6 +268,7 @@ size_t metrics_to_json(char *buf, size_t max_len)
         "\"last_cry_conf\":%.3f,\"max_cry_conf_1s\":%.3f,"
         "\"alert_count\":%u,\"last_alert_epoch\":%lld,"
         "\"input_rms\":%.1f,\"sse_clients\":%u,\"log_bytes_written\":%u,"
+        "\"sd_write_errors\":%u,"
         "\"noise_floor_p50\":%.1f,\"noise_floor_p95\":%.1f,"
         "\"noise_floor_warm\":%s,\"noise_floor_remaining_s\":%u,"
         "\"stream_enabled\":%s,\"stream_listeners\":%u,"
@@ -277,6 +286,7 @@ size_t metrics_to_json(char *buf, size_t max_len)
         (unsigned)m.alert_count, (long long)m.last_alert_epoch,
         (double)m.input_rms,
         (unsigned)m.sse_clients, (unsigned)m.log_bytes_written,
+        (unsigned)m.sd_write_errors,
         (double)nf_p50, (double)nf_p95,
         nf_warm ? "true" : "false", (unsigned)nf_rem,
         stream_enabled ? "true" : "false", (unsigned)listeners);
