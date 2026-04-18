@@ -14,6 +14,7 @@ idf_component_register(
         "event_recorder.c"
         "noise_floor.c"
         "file_api.c"
+        "metrics_logger.c"
     INCLUDE_DIRS
         "."
     EMBED_TXTFILES

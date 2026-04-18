@@ -3,6 +3,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
 #include "esp_timer.h"
@@ -19,12 +20,25 @@
 #include "sd_logger.h"
 #include "web_ui.h"
 #include "noise_floor.h"
+#include "metrics_logger.h"
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 static bool s_yamnet_up;
+
+/* P0 #1 fix (hygiene audit 2026-04-18): on_net_state runs on the
+ * esp_event_loop_run_task; doing SD I/O there blocks the event loop long
+ * enough to trip xQueueGiveMutexRecursive asserts. We post deferred work
+ * to this queue and let housekeeping_task do the writes. */
+typedef enum {
+    DEFERRED_LOG_WIFI_UP = 0,
+    DEFERRED_LOG_WIFI_DOWN,
+    DEFERRED_LOG_NTP_SYNCED,
+} deferred_log_evt_t;
+
+static QueueHandle_t s_deferred_log_q;
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
 #include "audio_stream.h"
@@ -44,13 +58,20 @@ static void on_net_state(bool wifi_up, bool ntp_synced, void *ctx)
     metrics_set_wifi(wifi_up, 0);
     metrics_set_ntp_synced(ntp_synced);
 
-    if (wifi_up && !s_prev_wifi) {
-        sd_logger_event("wifi_up", 0.0f, 0);
-    } else if (!wifi_up && s_prev_wifi) {
-        sd_logger_event("wifi_down", 0.0f, 0);
-    }
-    if (ntp_synced && !s_prev_ntp) {
-        sd_logger_ntp_sync_marker();
+    /* Defer all SD I/O out of this callback (esp_event context). */
+    if (s_deferred_log_q) {
+        deferred_log_evt_t e;
+        if (wifi_up && !s_prev_wifi) {
+            e = DEFERRED_LOG_WIFI_UP;
+            xQueueSend(s_deferred_log_q, &e, 0);
+        } else if (!wifi_up && s_prev_wifi) {
+            e = DEFERRED_LOG_WIFI_DOWN;
+            xQueueSend(s_deferred_log_q, &e, 0);
+        }
+        if (ntp_synced && !s_prev_ntp) {
+            e = DEFERRED_LOG_NTP_SYNCED;
+            xQueueSend(s_deferred_log_q, &e, 0);
+        }
     }
     s_prev_wifi = wifi_up;
     s_prev_ntp = ntp_synced;
@@ -127,7 +148,8 @@ static void inference_task(void *arg)
     int8_t *patch = heap_caps_malloc(MEL_FRAMES_PATCH * MEL_BANDS, MALLOC_CAP_SPIRAM);
     float *all_confs = heap_caps_malloc(521 * sizeof(float), MALLOC_CAP_SPIRAM);
     if (!pcm || !patch || !all_confs) {
-        ESP_LOGE(TAG, "inference alloc failed");
+        ESP_LOGE(TAG, "inference alloc failed (pcm=%p patch=%p conf=%p)", pcm, patch, all_confs);
+        free(pcm); free(patch); free(all_confs);   /* free(NULL) is safe */
         vTaskDelete(NULL);
         return;
     }
@@ -187,6 +209,10 @@ static void inference_task(void *arg)
 
         metrics_update_inference(r.latency_ms, r.cry_conf);
 
+        /* Publish full 521-class output to metrics_logger so its 1 Hz
+         * JSONL row can compute top-10 over all AudioSet classes. */
+        metrics_logger_publish_inference(all_confs, r.cry_conf, r.latency_ms);
+
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED
         detector_set_threshold(base_threshold + noise_floor_threshold_adjust());
 #endif
@@ -221,6 +247,26 @@ static void housekeeping_task(void *arg)
     int64_t next_sd_us     = esp_timer_get_time() + 30 * 1000000;
     while (1) {
         esp_task_wdt_reset();
+
+        /* Drain the deferred-log queue (posted by on_net_state from the
+         * esp_event task). Safe to block on SD here. */
+        if (s_deferred_log_q) {
+            deferred_log_evt_t e;
+            while (xQueueReceive(s_deferred_log_q, &e, 0) == pdTRUE) {
+                switch (e) {
+                    case DEFERRED_LOG_WIFI_UP:
+                        sd_logger_event("wifi_up", 0.0f, 0);
+                        break;
+                    case DEFERRED_LOG_WIFI_DOWN:
+                        sd_logger_event("wifi_down", 0.0f, 0);
+                        break;
+                    case DEFERRED_LOG_NTP_SYNCED:
+                        sd_logger_ntp_sync_marker();
+                        break;
+                }
+            }
+        }
+
         cry_metrics_t m;
         metrics_snapshot(&m);
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED
@@ -291,6 +337,14 @@ void app_main(void)
 #endif
     xTaskCreatePinnedToCore(housekeeping_task, "hk", 6 * 1024, NULL, 2, NULL, 0);
 
+    /* Verbose 1 Hz classification logger (Stage 2.6a). Runs in parallel
+     * with sd_logger's CSV — JSONL is for analysis/retraining, CSV stays
+     * human-readable. Re-enabled after P0 #1 fix (deferred SD I/O). */
+    esp_err_t mlog_err = metrics_logger_init();
+    if (mlog_err != ESP_OK) {
+        ESP_LOGW(TAG, "metrics_logger init failed: 0x%x (non-fatal)", mlog_err);
+    }
+
 #if CONFIG_CRY_STREAM_COMPILED_IN
     ESP_ERROR_CHECK(audio_stream_init(CONFIG_CRY_STREAM_MAX_LISTENERS,
                                       CONFIG_CRY_STREAM_RING_KB));
@@ -307,6 +361,13 @@ void app_main(void)
     };
     event_recorder_init(&rec);
 #endif
+
+    /* Create deferred-log queue before network starts so on_net_state's
+     * first firing has somewhere to post (see P0 #1 in audit doc). */
+    s_deferred_log_q = xQueueCreate(8, sizeof(deferred_log_evt_t));
+    if (!s_deferred_log_q) {
+        ESP_LOGE(TAG, "deferred-log queue create failed");
+    }
 
     /* network_start must run before web_ui_start so LWIP is initialized.
      * inference_task starts BEFORE web_ui_start, so web_ui_push_event

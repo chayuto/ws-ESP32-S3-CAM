@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
@@ -40,6 +41,7 @@ static char s_path[64];
 static uint32_t s_rotate_bytes;
 static uint32_t s_written_in_file;
 static uint32_t s_total_written;
+static uint32_t s_last_flush_bytes;
 static bool s_sd_mounted;
 static bool s_fallback_fat_mounted;
 static int s_seq_counter;
@@ -69,6 +71,7 @@ static void reopen_locked(void)
     make_path_locked();
     s_f = fopen(s_path, "a");
     s_written_in_file = 0;
+    s_last_flush_bytes = 0;
     if (!s_f) {
         ESP_LOGW(TAG, "fopen %s failed", s_path);
     } else {
@@ -213,14 +216,20 @@ static void write_row_locked(const char *event, float cry_conf, int32_t latency_
         s_total_written += n;
         if (s_written_in_file >= s_rotate_bytes) {
             reopen_locked();
-        } else if ((s_total_written & 0x3FF) == 0) {
+        } else if (s_written_in_file - s_last_flush_bytes >= 2048) {
+            /* fflush alone leaves data in FATFS's cache; fsync pushes to SD.
+             * Without fsync, a power loss / reboot loses everything since
+             * the last fclose (which is every rotation or at NTP sync). */
             fflush(s_f);
+            fsync(fileno(s_f));
+            s_last_flush_bytes = s_written_in_file;
         }
     }
 }
 
 void sd_logger_event(const char *event, float cry_conf, int32_t latency_ms)
 {
+    if (!s_lock) return;                 /* pre-init call (hygiene audit P0 #2) */
     cry_metrics_t m;
     metrics_snapshot(&m);
     float nf_p95 = 0.0f;
@@ -239,6 +248,7 @@ void sd_logger_event(const char *event, float cry_conf, int32_t latency_ms)
 
 void sd_logger_snapshot(void)
 {
+    if (!s_lock) return;                 /* pre-init call (hygiene audit P0 #2) */
     cry_metrics_t m;
     metrics_snapshot(&m);
     float nf_p95 = 0.0f;
@@ -257,6 +267,7 @@ void sd_logger_snapshot(void)
 
 void sd_logger_ntp_sync_marker(void)
 {
+    if (!s_lock) return;                 /* pre-init call (hygiene audit P0 #2) */
     cry_metrics_t m;
     metrics_snapshot(&m);
     float nf_p95 = 0.0f;
@@ -279,6 +290,7 @@ void sd_logger_ntp_sync_marker(void)
 
 size_t sd_logger_tail(char *dst, size_t dst_max, uint32_t lines)
 {
+    if (!s_lock) return 0;               /* pre-init call (hygiene audit P0 #2) */
     if (lines > RING_LINES) lines = RING_LINES;
     if (lines > s_ring_count) lines = s_ring_count;
 
