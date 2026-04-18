@@ -13,8 +13,8 @@
 #include "sdkconfig.h"
 
 #include "sd_logger.h"
-#include "led_alert.h"
 #include "file_api.h"
+#include "led_alert.h"
 #include "breadcrumb.h"
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
@@ -361,11 +361,15 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
 #if CONFIG_CRY_REC_COMPILED_IN
     httpd_uri_t h_rec_list = { .uri = "/events/list", .method = HTTP_GET, .handler = event_recorder_list_handler };
     httpd_uri_t h_rec_file = { .uri = "/recordings/*", .method = HTTP_GET, .handler = event_recorder_http_handler };
-    httpd_uri_t h_rec_trig = { .uri = "/record/trigger", .method = HTTP_POST, .handler = handler_record_trigger };
-    httpd_uri_t h_rec_stat = { .uri = "/record/status",  .method = HTTP_GET,  .handler = handler_record_status };
+    httpd_uri_t h_rec_trig  = { .uri = "/record/trigger", .method = HTTP_POST, .handler = handler_record_trigger };
+    /* GET alias so a phone browser address bar or a bookmarked link works
+     * without a form/fetch. Same handler, same query-string parsing. */
+    httpd_uri_t h_rec_trigg = { .uri = "/record/trigger", .method = HTTP_GET,  .handler = handler_record_trigger };
+    httpd_uri_t h_rec_stat  = { .uri = "/record/status",  .method = HTTP_GET,  .handler = handler_record_status };
     httpd_register_uri_handler(s_server, &h_rec_list);
     httpd_register_uri_handler(s_server, &h_rec_file);
     httpd_register_uri_handler(s_server, &h_rec_trig);
+    httpd_register_uri_handler(s_server, &h_rec_trigg);
     httpd_register_uri_handler(s_server, &h_rec_stat);
 #endif
 

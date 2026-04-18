@@ -43,6 +43,12 @@ static int   s_day_of_year;
 static bool  s_last_ntp_synced;      /* tracks false→true edge so we reopen at sync */
 static const char *s_mount_prefix;   /* /sdcard or /logs */
 
+/* fopen backoff: if open fails, don't thrash every tick. Exponential
+ * 5 → 10 → 30 → 60 s cap. Event-driven reopens (NTP flip, day rollover)
+ * bypass the gate since the target path changed. */
+static int64_t  s_next_fopen_retry_us;
+static uint32_t s_fopen_backoff_s;
+
 static temperature_sensor_handle_t s_tsens;
 
 static const char *state_name(cry_state_t s)
@@ -110,10 +116,18 @@ static void reopen_if_needed(void)
      *   1. no file yet (cold start)
      *   2. NTP just flipped false→true (move from infer-boot → infer-YYYYMMDD)
      *   3. NTP synced and the day number changed (midnight rollover) */
-    bool need = (s_f == NULL)
-             || (ntp && !s_last_ntp_synced)
-             || (ntp && tmv.tm_yday != s_day_of_year);
-    if (!need) return;
+    bool ntp_flip  = (ntp && !s_last_ntp_synced);
+    bool day_flip  = (ntp && s_f != NULL && tmv.tm_yday != s_day_of_year);
+    bool need_open = (s_f == NULL) || ntp_flip || day_flip;
+    if (!need_open) return;
+
+    /* If this is a pure "still no file, keep trying" case (not an event-driven
+     * flip), honor the exponential backoff so we don't thrash fopen once a
+     * second on a stuck SD. */
+    bool event_driven = ntp_flip || day_flip;
+    if (!event_driven && s_fopen_backoff_s > 0) {
+        if (esp_timer_get_time() < s_next_fopen_retry_us) return;
+    }
 
     if (s_f) { fclose(s_f); s_f = NULL; }
     make_path(s_path, sizeof(s_path));
@@ -122,8 +136,18 @@ static void reopen_if_needed(void)
     s_last_ntp_synced = ntp;
     if (!s_f) {
         metrics_increment_sd_write_error();
-        ESP_LOGW(TAG, "fopen %s failed", s_path);
+        s_fopen_backoff_s = s_fopen_backoff_s ? (s_fopen_backoff_s * 2) : 5;
+        if (s_fopen_backoff_s > 60) s_fopen_backoff_s = 60;
+        s_next_fopen_retry_us = esp_timer_get_time()
+                              + (int64_t)s_fopen_backoff_s * 1000000LL;
+        ESP_LOGW(TAG, "fopen %s failed; next retry in %us",
+                 s_path, (unsigned)s_fopen_backoff_s);
     } else {
+        if (s_fopen_backoff_s > 0) {
+            ESP_LOGI(TAG, "fopen recovered after backoff");
+        }
+        s_fopen_backoff_s = 0;
+        s_next_fopen_retry_us = 0;
         ESP_LOGI(TAG, "jsonl logging to %s", s_path);
     }
 }
@@ -226,7 +250,8 @@ static void write_row(FILE *f)
     n += snprintf(buf + n, sizeof(buf) - n,
         ",\"sys\":{\"free_heap\":%u,\"free_psram\":%u,"
         "\"min_heap\":%u,\"rssi\":%d,\"die_c\":%.1f,"
-        "\"ntp\":%s,\"wifi\":%s,\"sd\":%s,\"alerts\":%u,\"sd_err\":%u}",
+        "\"ntp\":%s,\"wifi\":%s,\"sd\":%s,\"alerts\":%u,\"sd_err\":%u,"
+        "\"ovr_bytes\":%u,\"ovr_evts\":%u}",
         (unsigned)m.free_heap, (unsigned)m.free_psram,
         (unsigned)esp_get_minimum_free_heap_size(),
         (int)m.wifi_rssi, (double)die_c,
@@ -234,7 +259,9 @@ static void write_row(FILE *f)
         m.wifi_connected ? "true" : "false",
         m.sd_mounted ? "true" : "false",
         (unsigned)m.alert_count,
-        (unsigned)m.sd_write_errors);
+        (unsigned)m.sd_write_errors,
+        (unsigned)m.audio_overrun_bytes,
+        (unsigned)m.audio_overrun_events);
 
     /* Stack HWM per task — uses uxTaskGetSystemState (trace facility). */
 #if (configUSE_TRACE_FACILITY == 1)

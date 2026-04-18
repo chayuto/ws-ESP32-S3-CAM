@@ -16,6 +16,7 @@ idf_component_register(
         "file_api.c"
         "metrics_logger.c"
         "breadcrumb.c"
+        "auto_trigger.c"
     INCLUDE_DIRS
         "."
     EMBED_TXTFILES
@@ -39,4 +40,5 @@ idf_component_register(
         mdns
         espcoredump
         esp_partition
+        esp_app_format
 )

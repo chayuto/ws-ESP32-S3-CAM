@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
+#include "esp_timer.h"
 
 #include "bsp/esp-bsp.h"
 #include "esp_codec_dev.h"
@@ -53,13 +54,17 @@ static float compute_rms(const int16_t *s, size_t n)
 
 static void fanout_taps(const int16_t *pcm, size_t samples)
 {
+    size_t wanted = samples * sizeof(int16_t);
+    size_t dropped_total = 0;
     xSemaphoreTake(s_taps_lock, portMAX_DELAY);
     for (int i = 0; i < MAX_TAPS; ++i) {
         if (s_taps[i].in_use) {
-            xStreamBufferSend(s_taps[i].ring, pcm, samples * sizeof(int16_t), 0);
+            size_t sent = xStreamBufferSend(s_taps[i].ring, pcm, wanted, 0);
+            if (sent < wanted) dropped_total += (wanted - sent);
         }
     }
     xSemaphoreGive(s_taps_lock);
+    if (dropped_total > 0) metrics_add_audio_overrun((uint32_t)dropped_total);
 }
 
 static void capture_task(void *arg)
@@ -84,7 +89,17 @@ static void capture_task(void *arg)
         size_t wanted = READ_CHUNK_SAMPLES * sizeof(int16_t);
         size_t sent = xStreamBufferSend(s_stream, buf, wanted, pdMS_TO_TICKS(20));
         if (sent != wanted) {
-            ESP_LOGW(TAG, "stream overrun: %u/%u", (unsigned)sent, (unsigned)wanted);
+            /* Ring full: downstream consumer (yamnet task) fell behind.
+             * Throttle log to at most 1/s so a sustained overrun doesn't
+             * paper-over itself with the logger's own CPU cost. Counter is
+             * authoritative, log is just a heads-up. */
+            static int64_t last_log_us = 0;
+            int64_t now_us = esp_timer_get_time();
+            if (now_us - last_log_us > 1000000) {
+                ESP_LOGW(TAG, "stream overrun: %u/%u", (unsigned)sent, (unsigned)wanted);
+                last_log_us = now_us;
+            }
+            metrics_add_audio_overrun((uint32_t)(wanted - sent));
         }
         fanout_taps(buf, READ_CHUNK_SAMPLES);
 
@@ -96,6 +111,14 @@ static void capture_task(void *arg)
 
 esp_err_t audio_capture_init(uint32_t sample_rate_hz, int mic_gain_db)
 {
+    /* Compile-time invariants: main ring must hold at least one read chunk
+     * plus one FRAME_SAMPLES trigger, otherwise xStreamBufferSend can never
+     * succeed even with an empty ring. Caught at build — no runtime path. */
+    _Static_assert(STREAM_BYTES >= READ_CHUNK_SAMPLES * sizeof(int16_t) * 2,
+                   "STREAM_BYTES too small for one read chunk + headroom");
+    _Static_assert(READ_CHUNK_SAMPLES % FRAME_SAMPLES == 0,
+                   "READ_CHUNK_SAMPLES must be a multiple of FRAME_SAMPLES");
+
     ESP_ERROR_CHECK(bsp_i2c_init());
     s_mic = bsp_audio_codec_microphone_init();
     if (!s_mic) {
@@ -141,6 +164,16 @@ size_t audio_capture_read(int16_t *dst, size_t want_samples, TickType_t timeout)
 
 audio_tap_handle_t audio_capture_add_tap(size_t ring_bytes)
 {
+    /* A tap ring smaller than a single fanout write guarantees drops every
+     * iteration. Caller passes bytes; reject obviously broken sizes early
+     * so the crash reason is visible at add_tap() rather than later as
+     * mysterious 100% drop rate in metrics. */
+    const size_t min_bytes = READ_CHUNK_SAMPLES * sizeof(int16_t) * 2;
+    if (ring_bytes < min_bytes) {
+        ESP_LOGE(TAG, "tap ring too small: %u < %u", (unsigned)ring_bytes,
+                 (unsigned)min_bytes);
+        return NULL;
+    }
     xSemaphoreTake(s_taps_lock, portMAX_DELAY);
     for (int i = 0; i < MAX_TAPS; ++i) {
         if (!s_taps[i].in_use) {

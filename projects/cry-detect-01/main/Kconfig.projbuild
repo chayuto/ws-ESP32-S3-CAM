@@ -122,9 +122,51 @@ menu "Cry-detect-01"
 
         config CRY_REC_KEEP_FILES
             int "Max retained WAV files (oldest deleted)"
-            default 50
-            range 5 500
+            default 500
+            range 5 5000
             depends on CRY_REC_COMPILED_IN
+            help
+                Upper bound on WAVs kept in the events directory. At 40 s
+                per clip (1.28 MB) a 32 GB card fits ~12k; default 500 leaves
+                ample headroom for labeled training data collection.
+
+    endmenu
+
+    menu "RMS-threshold auto-trigger (data collection fallback)"
+
+        config CRY_AUTO_TRIG_ENABLED
+            bool "Auto-trigger recordings from RMS-vs-noise-floor crossings"
+            default y
+            help
+                Fires event_recorder_trigger_manual("auto-rms-...") when input RMS
+                sustains above (multiplier * noise_floor_p95) for sustain_ms.
+                Model-independent fallback while the INT8 YAMNet head is saturated.
+                Useful for overnight data collection — any loud event gets captured
+                with labeled file so false-positives can be culled in the morning.
+
+        config CRY_AUTO_TRIG_MULTIPLIER
+            int "Threshold multiplier over noise_floor_p95"
+            default 5
+            range 2 20
+            depends on CRY_AUTO_TRIG_ENABLED
+
+        config CRY_AUTO_TRIG_ABS_RMS
+            int "Absolute minimum RMS floor (safety against 0-p95 quiet-room)"
+            default 200
+            range 50 2000
+            depends on CRY_AUTO_TRIG_ENABLED
+
+        config CRY_AUTO_TRIG_SUSTAIN_MS
+            int "Sustain time above threshold before firing (ms)"
+            default 1500
+            range 200 10000
+            depends on CRY_AUTO_TRIG_ENABLED
+
+        config CRY_AUTO_TRIG_COOLDOWN_S
+            int "Cooldown between triggers (s)"
+            default 60
+            range 10 600
+            depends on CRY_AUTO_TRIG_ENABLED
 
     endmenu
 

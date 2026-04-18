@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "esp_app_desc.h"
 #include "sdkconfig.h"
 
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED
@@ -78,15 +79,28 @@ void metrics_set_state(cry_state_t s)
     xSemaphoreGive(s_lock);
 }
 
+/* Must be called with s_lock held. Returns with s_lock held.
+ *
+ * Copies the subscriber table and metrics snapshot to local storage, drops
+ * the lock for the entire fanout, then re-acquires. Previous implementation
+ * gave/took the lock inside the loop per-subscriber, which (a) paid the
+ * mutex cost N times for no isolation benefit, and (b) let s_sub_count
+ * grow mid-iteration — a late-subscribing thread would see the callback
+ * table between give/take in an indeterminate state. With a local copy the
+ * fanout is strictly ordered against its own captured snapshot, and
+ * subscribers added during dispatch get events on the next update. */
 static void fanout_locked(void)
 {
     cry_metrics_t snap = s_metrics;
-    for (uint32_t i = 0; i < s_sub_count; ++i) {
-        subscriber_t sub = s_subs[i];
-        xSemaphoreGive(s_lock);
-        sub.cb(&snap, sub.ctx);
-        xSemaphoreTake(s_lock, portMAX_DELAY);
+    subscriber_t subs_copy[MAX_SUBSCRIBERS];
+    uint32_t n = s_sub_count;
+    if (n > MAX_SUBSCRIBERS) n = MAX_SUBSCRIBERS;
+    for (uint32_t i = 0; i < n; ++i) subs_copy[i] = s_subs[i];
+    xSemaphoreGive(s_lock);
+    for (uint32_t i = 0; i < n; ++i) {
+        if (subs_copy[i].cb) subs_copy[i].cb(&snap, subs_copy[i].ctx);
     }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
 }
 
 void metrics_update_inference(int32_t latency_ms, float cry_conf)
@@ -183,6 +197,15 @@ void metrics_increment_sd_write_error(void)
     xSemaphoreGive(s_lock);
 }
 
+void metrics_add_audio_overrun(uint32_t bytes_dropped)
+{
+    if (!s_lock || bytes_dropped == 0) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_metrics.audio_overrun_bytes += bytes_dropped;
+    s_metrics.audio_overrun_events++;
+    xSemaphoreGive(s_lock);
+}
+
 void metrics_update_watched(const float *confs, int n)
 {
     if (!confs) return;
@@ -259,6 +282,15 @@ size_t metrics_to_json(char *buf, size_t max_len)
     stream_enabled = true;
 #endif
 
+    /* Build identity — ESP-IDF embeds date/time/git hash in app_desc. */
+    const esp_app_desc_t *ad = esp_app_get_description();
+    char build_sha[9] = "";   /* first 8 hex chars of elf_sha256 */
+    if (ad) {
+        for (int i = 0; i < 4; ++i) {
+            snprintf(build_sha + i*2, 3, "%02x", ad->app_elf_sha256[i]);
+        }
+    }
+
     int n = snprintf(buf, max_len,
         "{\"state\":\"%s\",\"ntp_synced\":%s,\"wifi_connected\":%s,"
         "\"wifi_rssi\":%d,\"sd_mounted\":%s,\"uptime_s\":%u,"
@@ -269,9 +301,12 @@ size_t metrics_to_json(char *buf, size_t max_len)
         "\"alert_count\":%u,\"last_alert_epoch\":%lld,"
         "\"input_rms\":%.1f,\"sse_clients\":%u,\"log_bytes_written\":%u,"
         "\"sd_write_errors\":%u,"
+        "\"audio_overrun_bytes\":%u,\"audio_overrun_events\":%u,"
         "\"noise_floor_p50\":%.1f,\"noise_floor_p95\":%.1f,"
         "\"noise_floor_warm\":%s,\"noise_floor_remaining_s\":%u,"
         "\"stream_enabled\":%s,\"stream_listeners\":%u,"
+        "\"build_date\":\"%s\",\"build_time\":\"%s\","
+        "\"build_sha\":\"%s\",\"fw_ver\":\"%s\","
         "\"watched\":{",
         state_str(m.state),
         m.ntp_synced ? "true" : "false",
@@ -287,9 +322,14 @@ size_t metrics_to_json(char *buf, size_t max_len)
         (double)m.input_rms,
         (unsigned)m.sse_clients, (unsigned)m.log_bytes_written,
         (unsigned)m.sd_write_errors,
+        (unsigned)m.audio_overrun_bytes, (unsigned)m.audio_overrun_events,
         (double)nf_p50, (double)nf_p95,
         nf_warm ? "true" : "false", (unsigned)nf_rem,
-        stream_enabled ? "true" : "false", (unsigned)listeners);
+        stream_enabled ? "true" : "false", (unsigned)listeners,
+        ad ? ad->date : "?",
+        ad ? ad->time : "?",
+        build_sha,
+        ad ? ad->version : "?");
     if (n < 0) return 0;
 
     for (int i = 0; i < CRY_WATCHED_N && n < (int)max_len - 40; ++i) {

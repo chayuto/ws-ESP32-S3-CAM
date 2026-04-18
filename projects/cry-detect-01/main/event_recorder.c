@@ -93,36 +93,49 @@ static void make_filename(char *out, size_t max, const char *prefix, const char 
     }
 }
 
-#define RETAIN_MAX 64
-#define RETAIN_PATH_LEN 96
-
+/* Prune oldest cry-*.wav in `dir` until count <= keep.
+ *
+ * Previous implementation materialized up to 64 paths into a static table,
+ * which put a hard 64-WAV ceiling on retention regardless of SD capacity.
+ * New approach: each iteration scans once, tracks the oldest mtime seen, and
+ * unlinks that single file if we're over quota. Typical steady-state case
+ * is count == keep + 1 → one scan, one unlink, done. O(n * over) where
+ * `over = count - keep` (usually 1). No static allocation. */
 static void retain_newest_only(const char *dir, uint32_t keep)
 {
-    DIR *d = opendir(dir);
-    if (!d) return;
-    struct dirent *e;
-    static char paths[RETAIN_MAX][RETAIN_PATH_LEN];
-    size_t n = 0;
-    while ((e = readdir(d)) && n < RETAIN_MAX) {
-        if (strncmp(e->d_name, "cry-", 4) != 0) continue;
-        int w = snprintf(paths[n], RETAIN_PATH_LEN, "%s/%.40s", dir, e->d_name);
-        if (w > 0 && w < RETAIN_PATH_LEN) n++;
-    }
-    closedir(d);
-    while (n > keep) {
-        size_t oldest = 0;
-        struct stat st_old, st_cur;
-        stat(paths[0], &st_old);
-        for (size_t i = 1; i < n; ++i) {
-            stat(paths[i], &st_cur);
-            if (st_cur.st_mtime < st_old.st_mtime) {
-                oldest = i; st_old = st_cur;
+    char path[96];
+    while (1) {
+        DIR *d = opendir(dir);
+        if (!d) return;
+        struct dirent *e;
+        uint32_t count = 0;
+        char oldest_name[64] = {0};
+        time_t oldest_mtime = 0;
+        bool have_oldest = false;
+        while ((e = readdir(d)) != NULL) {
+            if (strncmp(e->d_name, "cry-", 4) != 0) continue;
+            count++;
+            int w = snprintf(path, sizeof(path), "%s/%s", dir, e->d_name);
+            if (w <= 0 || w >= (int)sizeof(path)) continue;
+            struct stat st;
+            if (stat(path, &st) != 0) continue;
+            if (!have_oldest || st.st_mtime < oldest_mtime) {
+                oldest_mtime = st.st_mtime;
+                strncpy(oldest_name, e->d_name, sizeof(oldest_name) - 1);
+                oldest_name[sizeof(oldest_name) - 1] = '\0';
+                have_oldest = true;
             }
         }
-        unlink(paths[oldest]);
-        ESP_LOGI(TAG, "retained pruned: %s", paths[oldest]);
-        for (size_t i = oldest; i + 1 < n; ++i) memcpy(paths[i], paths[i + 1], RETAIN_PATH_LEN);
-        n--;
+        closedir(d);
+        if (count <= keep || !have_oldest) return;
+        int w = snprintf(path, sizeof(path), "%s/%s", dir, oldest_name);
+        if (w > 0 && w < (int)sizeof(path) && unlink(path) == 0) {
+            ESP_LOGI(TAG, "retained pruned: %s (count was %u, keep %u)",
+                     oldest_name, (unsigned)count, (unsigned)keep);
+        } else {
+            ESP_LOGW(TAG, "unlink failed: %s", path);
+            return;
+        }
     }
 }
 

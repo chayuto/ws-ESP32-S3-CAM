@@ -123,6 +123,70 @@
   </section>
 
   <section class="card" style="grid-column:1/3">
+    <div class="k" style="color:var(--muted);font-size:11px;letter-spacing:.05em;margin-bottom:8px">CAPTURE TRAINING SAMPLE — 40 s WAV + label</div>
+    <div id="rec_buttons" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <button class="rec-btn" data-note="cry">Cry</button>
+      <button class="rec-btn" data-note="ambient-quiet">Quiet</button>
+      <button class="rec-btn" data-note="ambient-tv">TV</button>
+      <button class="rec-btn" data-note="ambient-kitchen">Kitchen</button>
+      <button class="rec-btn" data-note="speech">Speech</button>
+      <button class="rec-btn" data-note="cry-playback">Cry playback</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="rec_note" placeholder="custom label…"
+             style="flex:1;background:#0d1016;color:var(--ink);border:1px solid var(--edge);
+                    border-radius:6px;padding:10px 12px;font-size:14px">
+      <button id="rec_custom" class="rec-btn">Record</button>
+    </div>
+    <div id="rec_status" class="listen-hint" style="margin-top:8px">&nbsp;</div>
+    <style>
+      .rec-btn { font: 600 14px/1 -apple-system, sans-serif;
+        padding: 12px 16px; min-height: 44px; background: var(--live);
+        color: #081120; border: none; border-radius: 8px; cursor: pointer; }
+      .rec-btn:active { opacity: 0.7; }
+      .rec-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    </style>
+    <script>
+      (function(){
+        const status = document.getElementById('rec_status');
+        const noteEl = document.getElementById('rec_note');
+        let busy = false;
+        function setBusy(on) {
+          busy = on;
+          document.querySelectorAll('.rec-btn').forEach(b => b.disabled = on);
+        }
+        async function trigger(note) {
+          if (busy) return;
+          setBusy(true);
+          status.textContent = 'Triggering…';
+          try {
+            const r = await fetch('/record/trigger?note=' + encodeURIComponent(note),
+                                  { method: 'POST' });
+            const j = await r.json();
+            if (j.triggered) {
+              status.textContent = `📼 Recording 40 s as "${note}"…`;
+              setTimeout(() => { status.textContent = '✓ Done — saved to /sdcard/events/'; setBusy(false); }, 40500);
+            } else {
+              status.textContent = '⏳ Already recording — try again in a moment';
+              setBusy(false);
+            }
+          } catch (e) {
+            status.textContent = '✗ Failed: ' + e.message;
+            setBusy(false);
+          }
+        }
+        document.querySelectorAll('.rec-btn[data-note]').forEach(b => {
+          b.addEventListener('click', () => trigger(b.dataset.note));
+        });
+        document.getElementById('rec_custom').addEventListener('click', () => {
+          const n = (noteEl.value || 'manual').trim().slice(0, 64);
+          trigger(n);
+        });
+      })();
+    </script>
+  </section>
+
+  <section class="card" style="grid-column:1/3">
     <div class="k" style="color:var(--muted);font-size:11px;letter-spacing:.05em;margin-bottom:8px">RECENT EVENTS — tap ▶ to play the recorded clip</div>
     <ul class="log" id="log"></ul>
   </section>

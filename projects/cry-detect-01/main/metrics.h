@@ -44,6 +44,8 @@ typedef struct {
     uint32_t sse_clients;
     uint32_t log_bytes_written;
     uint32_t sd_write_errors;           /* fwrite/fopen/fsync failures — visible in UI */
+    uint32_t audio_overrun_bytes;       /* PCM dropped because a ring was full (main+taps) */
+    uint32_t audio_overrun_events;      /* count of drop events (distinct from byte total) */
 
     float watched_conf[CRY_WATCHED_N];
 } cry_metrics_t;
@@ -59,6 +61,7 @@ void metrics_set_sd_mounted(bool v);
 void metrics_refresh_system(void);
 void metrics_update_watched(const float *watched_confs, int n);
 void metrics_increment_sd_write_error(void);
+void metrics_add_audio_overrun(uint32_t bytes_dropped);
 void metrics_snapshot(cry_metrics_t *out);
 
 typedef void (*metrics_event_cb_t)(const cry_metrics_t *snap, void *ctx);

@@ -11,7 +11,6 @@
 #include "sdkconfig.h"
 
 #include "metrics.h"
-#include "led_alert.h"
 #include "audio_capture.h"
 #include "mel_features.h"
 #include "yamnet.h"
@@ -46,6 +45,8 @@ static QueueHandle_t s_deferred_log_q;
 #endif
 #if CONFIG_CRY_REC_COMPILED_IN
 #include "event_recorder.h"
+#include "auto_trigger.h"
+#include "led_alert.h"
 #endif
 
 static const char *TAG = "main";
@@ -374,6 +375,11 @@ void app_main(void)
         .subdir = "events",
     };
     event_recorder_init(&rec);
+
+    /* RMS-threshold auto-trigger: overnight data-collection fallback while
+     * the INT8 YAMNet head is saturated. Fires event_recorder_trigger_manual
+     * on loud events, labeled auto-rms-Nx-rmsN for post-hoc culling. */
+    ESP_ERROR_CHECK(auto_trigger_init());
 #endif
 
     /* Create deferred-log queue before network starts so on_net_state's
@@ -400,7 +406,7 @@ void app_main(void)
 
     if (s_yamnet_up) {
         led_alert_set(LED_STATE_IDLE);
-    }  /* else LED stays in ERROR pattern set above */
+    }
     breadcrumb_set(s_yamnet_up ? "run" : "run_infra_only");
     ESP_LOGI(TAG, "boot complete%s", s_yamnet_up ? "" : " (INFRA-ONLY)");
 }
