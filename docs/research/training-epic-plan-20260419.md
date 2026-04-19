@@ -240,6 +240,84 @@ separate PR; pick tonight's threshold in the current
 Kconfig documentation describes a path that doesn't exist. Fix this
 alongside the §7b cleanup — for tonight we simply edit the hardcode.
 
+## 7d. Quaternary issue — audio-overrun tail under long soak
+
+Observed during the bedroom soak on 2026-04-19 (build `ef60239-dirty`,
+post-dense-fix, threshold 0.70, drain-to-1/4 applied):
+
+- T+4 min:  `audio_overrun_bytes=0, audio_overrun_events=0`
+- T+30 min: `audio_overrun_bytes=311552, audio_overrun_events=252`
+  — ≈ 1.2 KB/s average drop, ≈ 0.05% of the 256 KB/s raw stream.
+
+The drain-to-1/4 heuristic (`main.c:207`) eliminated overruns in the
+60 s living-room soak but leaks under long run + noisier input (RMS
+≈ 150 vs 47 living-room). Root cause likely periodic consumer stall
+(SD flush, metrics burst, Wi-Fi TX) letting the producer fill past
+the 32 KB capacity between drains.
+
+**Decision:** *defer*. A patch-based detector tolerates occasional
+~30 ms gaps (each 960 ms YAMNet patch is independent, and a real cry
+lasts seconds); rushing a fix pre-overnight-2 risks reintroducing a
+worse regression uncharacterised against real crib audio. Collect
+overnight-2 data first (overrun rate vs RMS vs p95_inference_ms over
+10+ hours) before picking an approach.
+
+**Candidate fixes, cheapest first** (pick after data in hand):
+
+1. **Ring buffer 32 → 64 KB.** One-line change in `audio_capture.c`,
+   free in PSRAM. Absorbs consumer stalls without touching the drain
+   heuristic. Least risky — start here unless data shows something
+   stranger.
+2. **Drain-to-/8** (from /4). Cheap, but pushes CPU spent draining
+   and may fight with the watermark policy.
+3. **Drop-oldest semantics with watermark log.** Change the stream
+   buffer policy so producer overwrites oldest on full, and count
+   the overwrite explicitly rather than losing it at the FreeRTOS
+   layer. Cleanest observability story; biggest diff.
+
+Track as a post-overnight-2 task; not in the critical path for
+tonight's data collection.
+
+## 7e. Manual-trigger UX — 40 s cooldown blocks rapid labeling
+
+Reported during the 2026-04-19 bedroom soak. The web-UI capture card
+(`www/index.html:128-187`) disables *every* `.rec-btn` for 40.5 s
+after any successful trigger via `setBusy(true)` + `setTimeout(...,
+40500)` (line 168). User perceives this as "Cry1 already exists" —
+buttons greyed, label input looks stale, and on reload the user
+forgets the last sequence number they typed.
+
+Nothing is actually colliding: the WAV filename is already
+timestamped (`cry-YYYYMMDDTHHMMSSZ.wav`, `event_recorder.c:75`) and
+the `note=` query param is pure metadata logged to
+`triggers.jsonl`. The backend only returns 409 when
+`s_recording==true`, which is cleared the moment the recorder task
+finishes writing — usually before the 40 s client cooldown ends.
+
+**Workaround while overnight-2 runs:**
+
+```
+curl -sS -X POST "http://192.168.1.100/record/trigger?note=cry-$(date +%H%M)"
+```
+
+Bypasses the UI entirely, label is auto-timestamped, no cooldown
+beyond the server's `s_recording` gate.
+
+**Proper fix** (post-overnight-2, firmware reflash — `index.html`
+is `EMBED_TXTFILES`):
+
+1. Replace the blanket 40 s `setBusy` with a poll of
+   `/record/status`. Re-enable as soon as `recording:false`. Only
+   disable the button that's currently firing.
+2. Pre-populate `#rec_note` with `cry-HHMM` on page load and on
+   focus — eliminates the "I can't remember the last seq number"
+   class of problem.
+3. Replace the generic `⏳ Already recording — try again in a
+   moment` string with a live countdown driven by
+   `/record/status` (seconds remaining of the 40 s window).
+
+Bundle with the §7d audio-overrun fix to amortise the reflash cost.
+
 ## 8. Deliverables
 
 - This doc, committed.
