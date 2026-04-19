@@ -318,6 +318,74 @@ is `EMBED_TXTFILES`):
 
 Bundle with the §7d audio-overrun fix to amortise the reflash cost.
 
+## 7f. Missed cry — 2026-04-19 ~15:48 AEST (bedroom soak)
+
+User report: "she cried and woke up" during the bedroom soak. Device
+never fired an alert and never auto-triggered a WAV — confirmed miss.
+
+**Evidence from `/sdcard/cry-20260419.log` (30 s snapshots):**
+
+| Time (AEST)   | RMS    | Floor p95 | Notes                             |
+|---------------|--------|-----------|-----------------------------------|
+| 14:02 – 15:47 | 80–115 | 420 → 184 | flat nursery baseline (90 min)    |
+| **15:48:32**  | **531.6** | 184    | **5.5× baseline, 2.9× floor**     |
+| 15:49:02+     | 90     | 184       | immediate return to baseline      |
+| 16:00:32      | 128    | 184       | `speech=0.622` — caregiver enters |
+
+`cry_conf_1s_max` stayed ≤ 0.501 across the entire window; no cry
+class ever budged off the INT8 quantisation floor.
+
+**Why every layer missed it:**
+
+1. **Auto-rms trigger (`auto_trigger.c`): 5× floor_p95 threshold.**
+   The 15:48 spike (531 / 184 = 2.9×) came in *below* the threshold
+   because the floor was still elevated from the 14:00 noise
+   cluster. Bedroom floor decays slowly — by 15:48 it had only
+   dropped to 184 (from a peak of ~1770 at 13:49). A pure ratio
+   check is blind to a brief cry riding on a still-hot floor.
+
+2. **Classifier: `cry_conf_1s_max=0.475` at 15:48.** Either the cry
+   was < 1 s of actual vocalisation (below the ≥ 960 ms YAMNet
+   patch needed to matter), or the INT8 model genuinely doesn't
+   rank her cry as `cry_baby`. Can't disambiguate without the
+   audio, which we don't have because auto-trigger didn't fire.
+
+3. **30 s snapshot cadence blurs the envelope.** A one-snapshot
+   spike means the event lasted somewhere between one sample and
+   30 s — we can't narrow it further from the log alone.
+
+**Implications for auto-trigger redesign:**
+
+- Add an **absolute RMS** arm alongside the 5× floor-ratio arm.
+  Trigger on `rms > max(5×floor_p95, ABS_FLOOR)` with
+  `ABS_FLOOR ≈ 400` (above the 15:48 spike threshold but well
+  above the quiet-bedroom 80–115 baseline).
+- Consider **short-burst protection**: if rms crosses 5×floor for
+  even a single 32 ms audio frame, arm a ~1.5 s recording window
+  so we don't rely on sustained loudness.
+- Lower the snapshot cadence (30 s → 5 s) during the noise-floor
+  warm period OR log peak-since-last-snapshot so a sub-second
+  spike still shows up in the JSONL.
+
+**Implications for classifier training (the actual epic):**
+
+This is **Stage 2 ground truth**: a confirmed real cry that our
+current model missed silently. Even without a WAV of the 15:48
+event itself, the miss tells us:
+
+- Real bedroom crying can be brief (< 1 s vocalisation bursts),
+  which the YAMNet 960 ms patch and 1 s conf-max window may
+  straddle awkwardly.
+- We need collection gear that is *more eager* than the
+  classifier: capture on any anomalous RMS, even sub-threshold,
+  so Stage 2 labelling has candidates to review.
+
+**Decision:** defer the fix to post-overnight-2, bundle with §7d
+and §7e. For tonight's overnight-2 collection, drop the device's
+auto-trigger ratio from 5× to 3× floor_p95 *if the infer log
+shows the floor settling < 60* — otherwise leave it alone and
+collect the miss data.
+
 ## 8. Deliverables
 
 - This doc, committed.
