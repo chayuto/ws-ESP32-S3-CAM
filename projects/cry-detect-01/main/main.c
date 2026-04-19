@@ -209,12 +209,20 @@ static void inference_task(void *arg)
          * per cycle, so leaving 16 KB in the ring pushes post-inference
          * total to ~36 KB > 32 KB capacity and we drop bytes. 1/4 leaves
          * 8 KB + 20 KB = 28 KB, fits with headroom. */
+        /* Regression 2026-04-19: pushing drained hops into mel_features in
+         * rapid succession (~12 hops back-to-back) corrupts the STFT window
+         * state, so take_patch returns a pathological patch that saturates
+         * the model to raw INT8 min (cry_conf = 0.500 = sigmoid(0)). Replay
+         * of the same audio on host gives cry_conf=0.718. Fix: drain the
+         * ring to vacate space, but do NOT feed drained audio to mel — the
+         * next outer-loop iteration reads a fresh hop and take_patch runs
+         * on the most recent accumulated features. Trade-off: patch content
+         * lags by one yamnet_run (~650 ms). Crying is continuous; tolerable. */
         const size_t drain_target = audio_capture_stream_capacity_bytes() / 4;
         unsigned drained_hops = 0;
         while (audio_capture_stream_bytes_available() > drain_target) {
             size_t dn = audio_capture_read(pcm, MEL_HOP_SAMPLES, 0);
             if (dn < MEL_HOP_SAMPLES) break;
-            mel_features_push(pcm, dn);
             drained_hops++;
             if (drained_hops > 200) break;  /* belt-and-braces bound */
         }

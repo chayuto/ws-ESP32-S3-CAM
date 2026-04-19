@@ -386,6 +386,157 @@ auto-trigger ratio from 5× to 3× floor_p95 *if the infer log
 shows the floor settling < 60* — otherwise leave it alone and
 collect the miss data.
 
+## 7g. Regression introduced by 9ceec4a — drain loop corrupts mel state
+
+Commit `9ceec4a` ("Fix YAMNet dense-layer silent-skip") repaired the
+model weights but introduced a runtime regression. Host replay of
+the shipped INT8 `yamnet.tflite` against captured WAVs gave
+`cry_baby = 0.718` on real cry audio, but the on-device pipeline
+output `cry_conf = 0.500` (= `sigmoid(0)`, i.e. raw INT8 == zero
+point — model saw pathological input).
+
+**Evidence (host replay vs device, same WAV, same tflite):**
+
+| WAV (label)          | RMS  | Device `cry_conf` | Replay `cry_baby` | Peak class (replay) |
+|----------------------|------|-------------------|-------------------|---------------------|
+| Cry3 (morning, 05:04)| 66   | 0.624             | 0.718             | `Baby cry, infant cry` |
+| Cry5 (morning, 05:07)| 106  | 0.618             | 0.718             | `Crying, sobbing` |
+| Cry6 (afternoon, 13:47)| 61 | **0.500**         | 0.718             | `Baby cry, infant cry` |
+| auto-rms-22x (13:54) | 2143 | **0.501**         | 0.718             | `Baby cry, infant cry` |
+
+Morning captures pre-date 9ceec4a; their 0.6+ was random-init
+classifier noise (per §7a). Afternoon captures post-date 9ceec4a;
+their 0.500 is a *new* failure mode — fixed model + broken runtime.
+
+**Root cause:** the pre-yamnet drain loop at `main.c:212-220` was
+`while(ring > 1/4 full) { read hop; mel_features_push(hop); }`. The
+drain fires ~12 hops back-to-back in < 1 ms before `take_patch`. The
+STFT/windowing state inside `mel_features_push` is not designed for
+back-to-back calls without real producer spacing — rapid-fire pushes
+leave the window buffer in a state that produces a near-uniform mel
+patch, which quantises to raw INT8 min across all 521 classes →
+dequant 0 → sigmoid 0.500.
+
+**Fix (tonight):** remove `mel_features_push(pcm, dn);` from the
+drain loop. Drain still vacates the ring (no overrun regression),
+but drained audio is discarded. The outer `while(1)` iteration
+reads a fresh hop → pushes to mel with normal producer spacing →
+`take_patch` returns a valid patch.
+
+Trade-off: patch content lags the acoustic event by one `yamnet_run`
+(~650 ms). Crying is continuous; acceptable for now. A cleaner
+redesign (drain, reset mel state, read one fresh hop, take patch)
+is a follow-up.
+
+**Validation status:** shipped 20:00 AEST pre-overnight-2. Quiet-room
+poll shows `overrun=0`, `fps=1.47`, `cry_conf=0.500` (correct for
+silence). Cry-audio verification blocked on real crying or physical
+playback near the mic. Go/no-go decision for overnight-2: if the
+first real cry produces `cry_conf > 0.5`, the fix is confirmed;
+otherwise we have a second regression.
+
+## 7h. Debugging infrastructure gap — boot-time model self-test
+
+The §7g regression survived a full 4 h bedroom soak because we had
+no way to tell, after each flash, whether the model was actually
+producing expected output. Symptoms (`cry_conf` pinned at 0.500)
+were indistinguishable from "quiet room, no cry" until we did a
+host-side replay against recorded WAVs — which required six hours
+of investigation and pulling 74 MB of audio off SD.
+
+**Proposed: on-device boot-time self-test.**
+
+- Bake one known cry WAV (~1 s) and one known speech WAV into the
+  firmware binary (SPIFFS or embedded blob, ~32 KB each at 16 kHz).
+- On boot, after `yamnet_init()`, feed each WAV's log-mel patches
+  through the live inference path and record `cry_conf_max` over
+  each clip.
+- Log a structured line:
+  `model-sanity: cry_wav=0.71 speech_wav=0.52 margin=+0.19 PASS`
+  or
+  `model-sanity: cry_wav=0.50 speech_wav=0.50 margin=+0.00 FAIL`
+- Expose via `/metrics` so deployment scripts can check before
+  leaving a fresh flash in the bedroom.
+- Optional: flash a red LED pattern on FAIL.
+
+**Why this is high-leverage:**
+
+- Catches any regression (model weights, input features, output
+  read, quantisation, drain-loop-style state corruption) within 5
+  seconds of boot, no soak required.
+- Requires no cry audio at deployment time — the test cry is
+  embedded.
+- Trivially automatable in CI: after build, flash, wait for boot,
+  curl `/metrics`, assert `model_sanity_pass == true`.
+
+**Cost estimate:** one afternoon. No new dependencies.
+
+## 7i. Debugging infrastructure gap — mel pipeline observability
+
+When §7g broke the mel state, the only downstream symptom was
+`cry_conf = 0.500`. There was no direct signal from the mel layer
+itself. Log surface for the entire log-mel pipeline today is zero.
+
+**Proposed: per-patch mel stats in the snapshot CSV + `/metrics`.**
+
+Add to `cry-YYYYMMDD.log` snapshot rows:
+
+- `mel_min`, `mel_max`, `mel_mean` — range of the 96×64 patch
+  (expected: wide range on real audio, ≈ 0 on corrupted state).
+- `mel_zero_frac` — fraction of mel cells at input zero point
+  (flag > 0.9 = flat patch, broken input).
+- `mel_frames_pushed` — count since last `take_patch`
+  (normal ≈ 3–5; a value > 50 means drain-burst or similar).
+- Drain accounting: `drain_hops_avg` per inference cycle.
+
+In `/metrics` JSON:
+
+- `mel_patch_variance` (rolling last-10 patches).
+- `mel_pathological_count` — patches flagged as flat.
+
+**Why this matters:**
+
+- A flat mel patch (mean ≈ max ≈ min) is a smoking gun for
+  pipeline breakage. With these fields in the snapshot log, §7g
+  would have been spot-diagnosable from the first minute of the
+  bedroom soak.
+- `drain_hops_avg` lets us see whether the drain is doing zero,
+  occasional, or constant work — a canary for any future
+  ring/consumer imbalance.
+- `mel_zero_frac` is a cheap proxy for "is the mic producing
+  signal at all?" at the input side of the model.
+
+**Cost estimate:** ~60 LOC in `mel_features.c` + schema bump in
+`sd_logger.c`. No memory impact (stats computed inline on the
+patch already in cache).
+
+## 7j. Other debugging gaps (ranked, deferred)
+
+Not urgent enough for tonight but worth planning:
+
+1. **Host-side golden-WAV CI gate.** `replay_yamnet.py` already
+   exists. Wrap it in a shell test that runs on every firmware-
+   adjacent commit: replays 5 golden WAVs (3 cry, 2 speech),
+   asserts cry_conf > 0.5 on cry and < 0.5 on speech. Would have
+   blocked `9ceec4a` at commit time.
+2. **Denser snapshot cadence or peak aggregates.** 30 s aliases
+   sub-minute events (see §7f). Either 5 s cadence *or* add
+   `rms_peak_30s`, `cry_conf_peak_30s`, `mel_energy_peak_30s`
+   columns so a burst still lands in the log.
+3. **`/debug/replay?wav=X` endpoint.** Run the on-device model
+   against a stored `EVENTS/*.wav` and return JSON with per-patch
+   `cry_conf`. A/B any firmware change against a fixed audio
+   reference in 1 second.
+4. **Live spectrogram in the web UI.** A 5 s rolling mel heatmap
+   makes "mic sees something but model is idle" obvious at a
+   glance. Also makes the §7i flat-patch case visible.
+5. **`triggers.jsonl` audibility ground truth.** Cry1 afternoon
+   was user-labelled "Cry1" but the replay showed no cry-class
+   activation — likely the baby wasn't audibly crying at the
+   moment of the tap. Add a post-capture "confirmed audible?"
+   tag (parent review), keep that subset as the gold set. Defer
+   until Stage 2 collection is stable.
+
 ## 8. Deliverables
 
 - This doc, committed.
