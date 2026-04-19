@@ -75,8 +75,8 @@ def build_mel_patch_model(params_mod, yamnet_mod):
     return model, params_obj
 
 
-def log_mel_patch_from_wav(path: str, params_mod, features_mod) -> np.ndarray | None:
-    """Return a (patch_frames, patch_bands) log-mel patch or None on failure."""
+def log_mel_patches_from_wav(path: str, params_mod, features_mod) -> np.ndarray | None:
+    """Return all (patch_frames, patch_bands) log-mel patches, or None on failure."""
     try:
         wav_bin = tf.io.read_file(path)
         wav, sr = tf.audio.decode_wav(wav_bin, desired_channels=1)
@@ -86,12 +86,11 @@ def log_mel_patch_from_wav(path: str, params_mod, features_mod) -> np.ndarray | 
     if sr.numpy() != 16000:
         return None
     p = params_mod.Params(sample_rate=16000, patch_hop_seconds=0.48)
-    log_mel, _ = features_mod.waveform_to_log_mel_spectrogram(samples, p)
-    log_mel = log_mel.numpy()
-    if log_mel.shape[0] < p.patch_frames:
+    _spec, patches = features_mod.waveform_to_log_mel_spectrogram_patches(samples, p)
+    patches = patches.numpy()
+    if patches.shape[0] == 0:
         return None
-    # Take the first full patch.
-    return log_mel[: p.patch_frames, :]
+    return patches  # [n_patches, patch_frames, mel_bands]
 
 
 def make_representative_dataset(params_obj, audio_dir: str | None, count: int):
@@ -104,12 +103,24 @@ def make_representative_dataset(params_obj, audio_dir: str | None, count: int):
         except Exception:
             features_mod = None
             params_mod = None
-        wavs = glob.glob(os.path.join(audio_dir, "*.wav"))
-        for w in wavs[: count]:
-            patch = log_mel_patch_from_wav(w, params_mod, features_mod)
-            if patch is not None:
-                patches.append(patch.astype(np.float32))
-        print(f"  calibration: {len(patches)} real patches from {audio_dir}")
+        wavs = sorted(glob.glob(os.path.join(audio_dir, "*.wav")))
+        # Collect ALL patches first, then randomly sample. Iterating files
+        # alphabetically and taking the first N patches per file biases
+        # the calibration set to whichever files come first in the sort —
+        # we hit this: first 500 patches were all speech (bench WAVs),
+        # zero cry, so the INT8 scales optimised for speech statistics
+        # and suppressed cry-like inputs. Shuffle fixes it.
+        all_patches: list[np.ndarray] = []
+        for w in wavs:
+            file_patches = log_mel_patches_from_wav(w, params_mod, features_mod)
+            if file_patches is None:
+                continue
+            for patch in file_patches:
+                all_patches.append(patch.astype(np.float32))
+        rng_shuf = np.random.default_rng(0)
+        rng_shuf.shuffle(all_patches)
+        patches.extend(all_patches[:count])
+        print(f"  calibration: {len(patches)} real patches sampled from {len(all_patches)} total across {len(wavs)} WAVs")
 
     rng = np.random.default_rng(0)
     while len(patches) < count:
@@ -145,6 +156,28 @@ def main() -> int:
     model, params_obj = build_mel_patch_model(params_mod, yamnet_mod)
     model.load_weights(os.path.join(WORK_DIR, "yamnet.h5"),
                        by_name=True, skip_mismatch=True)
+
+    # yamnet.py:103 creates `Dense(...)` with no name → Keras names it
+    # `dense` while yamnet.h5 expects `logits`. `by_name=True` with
+    # `skip_mismatch=True` silently drops it, leaving the final
+    # classifier random-initialized. Load it explicitly here.
+    import h5py
+    h5_path = os.path.join(WORK_DIR, "yamnet.h5")
+    with h5py.File(h5_path, "r") as hf:
+        kernel = hf["logits/logits/kernel:0"][()]
+        bias = hf["logits/logits/bias:0"][()]
+    # Find the unloaded dense layer (any Dense with uninitialized-looking stats
+    # won't exist — it exists but has init weights; match by shape instead)
+    for layer in model.layers:
+        if isinstance(layer, tf.keras.layers.Dense) and \
+                layer.weights and layer.weights[0].shape == kernel.shape:
+            layer.set_weights([kernel, bias])
+            print(f"  manually loaded logits into `{layer.name}` "
+                  f"(kernel={kernel.shape}, bias={bias.shape})")
+            break
+    else:
+        raise RuntimeError("Could not find Dense layer matching logits shape")
+
     model.summary(line_length=100)
 
     print(f"[3/4] INT8 PTQ convert (calib_count={args.calib_count})...")

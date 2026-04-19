@@ -12,6 +12,12 @@ esp_err_t audio_capture_init(uint32_t sample_rate_hz, int mic_gain_db);
 size_t audio_capture_read(int16_t *dst, size_t want_samples, TickType_t timeout);
 StreamBufferHandle_t audio_capture_stream(void);
 
+/* Backlog currently queued in the main stream (bytes). Used by the infer
+ * task to drain excess before running yamnet, which would otherwise block
+ * the consumer long enough to let the ring overflow. */
+size_t audio_capture_stream_bytes_available(void);
+size_t audio_capture_stream_capacity_bytes(void);
+
 /* Multi-consumer tap for streaming, recording, etc. Each call returns a
  * unique handle; capture task fans out PCM to every registered tap until
  * it is removed. */

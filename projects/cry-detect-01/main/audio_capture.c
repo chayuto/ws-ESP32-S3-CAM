@@ -20,7 +20,10 @@
 static const char *TAG = "audio";
 
 #define FRAME_SAMPLES 160                 /* 10 ms @ 16 kHz */
-#define STREAM_BYTES  (4 * 1024 * sizeof(int16_t))
+/* 32 KB ring = 1 s of 16 kHz mono @ int16. yamnet_run blocks the consumer
+ * for ~500 ms per patch; anything <500 ms of headroom overflows every
+ * inference cycle (~8 dropped bytes/sec observed on the 8 KB ring). */
+#define STREAM_BYTES  (16 * 1024 * sizeof(int16_t))
 #define READ_CHUNK_SAMPLES (FRAME_SAMPLES * 4)   /* 40 ms read granularity */
 #define MAX_TAPS 4
 
@@ -160,6 +163,16 @@ size_t audio_capture_read(int16_t *dst, size_t want_samples, TickType_t timeout)
 {
     size_t got = xStreamBufferReceive(s_stream, dst, want_samples * sizeof(int16_t), timeout);
     return got / sizeof(int16_t);
+}
+
+size_t audio_capture_stream_bytes_available(void)
+{
+    return s_stream ? xStreamBufferBytesAvailable(s_stream) : 0;
+}
+
+size_t audio_capture_stream_capacity_bytes(void)
+{
+    return STREAM_BYTES;
 }
 
 audio_tap_handle_t audio_capture_add_tap(size_t ring_bytes)

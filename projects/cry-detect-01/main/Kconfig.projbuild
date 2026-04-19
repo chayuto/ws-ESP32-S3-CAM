@@ -193,4 +193,43 @@ menu "Cry-detect-01"
 
     endmenu
 
+    menu "Log retention"
+
+        config CRY_LOG_RETENTION_ENABLED
+            bool "Enable device-side log retention task"
+            default y
+            help
+                Periodically scans the SD root for day-bucketed log files
+                (infer-YYYYMMDD.jsonl, cry-YYYYMMDD.log) and unlinks any
+                that are older than the retention window. WAV retention
+                is handled separately by event_recorder.c and is not
+                affected by this.
+
+        config CRY_LOG_RETENTION_DAYS
+            int "Days to keep day-bucketed logs"
+            default 14
+            range 1 365
+            depends on CRY_LOG_RETENTION_ENABLED
+
+        config CRY_LOG_RETENTION_PERIOD_S
+            int "Seconds between retention scans"
+            default 3600
+            range 60 86400
+            depends on CRY_LOG_RETENTION_ENABLED
+            help
+                Cheap scan; once an hour is plenty. First run is
+                delayed 60 s after boot to let NTP + SD settle.
+
+        config CRY_SD_LOW_SPACE_MB
+            int "Free-bytes threshold that raises sd_low_space"
+            default 256
+            range 16 4096
+            help
+                When /sdcard free bytes drop below this, metrics expose
+                sd_low_space=true and log a warning. Does not delete
+                anything — purely a signal so dashboards / bash monitor
+                can react.
+
+    endmenu
+
 endmenu

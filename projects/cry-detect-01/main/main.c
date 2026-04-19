@@ -46,6 +46,7 @@ static QueueHandle_t s_deferred_log_q;
 #if CONFIG_CRY_REC_COMPILED_IN
 #include "event_recorder.h"
 #include "auto_trigger.h"
+#include "log_retention.h"
 #include "led_alert.h"
 #endif
 
@@ -164,7 +165,10 @@ static void inference_task(void *arg)
      * with CRY_DETECT_CONSEC_FRAMES=6 in Kconfig for stability against
      * single-frame spikes. Re-evaluate once Stage 2.1 real-audio
      * calibration lands. */
-    float base_threshold = 0.65f;
+    /* 0.70 (sigmoid-of-dequant space). Replay harness against fixed-
+     * logits model shows incident files saturate at 0.718, speech
+     * bench files peak at 0.622. See training-epic-plan-20260419 §7a. */
+    float base_threshold = 0.70f;
     ESP_LOGI(TAG, "infer: input scale=%.5f zero_point=%d num_classes=%d",
              (double)scale, zp, yamnet_num_classes());
 
@@ -192,6 +196,28 @@ static void inference_task(void *arg)
             continue;
         }
         patches++;
+
+        /* yamnet_run blocks the consumer for ~500 ms. During that time
+         * the producer writes ~16 KB into the stream buffer. Without this
+         * drain, each cycle leaves ~4 KB of backlog — the buffer fills and
+         * starts dropping bytes after ~5 s of run time. Pre-yamnet drain:
+         * read + mel_push any hops above half-full, so the next 500 ms of
+         * producer fill lands on a near-empty ring. Latest patch is taken
+         * after drain, so yamnet always runs on the most recent audio. */
+        /* Drain to 1/4 not 1/2. With the fixed-dense model, yamnet_run
+         * takes ~650 ms (vs ~500 ms before) — producer writes ~20 KB
+         * per cycle, so leaving 16 KB in the ring pushes post-inference
+         * total to ~36 KB > 32 KB capacity and we drop bytes. 1/4 leaves
+         * 8 KB + 20 KB = 28 KB, fits with headroom. */
+        const size_t drain_target = audio_capture_stream_capacity_bytes() / 4;
+        unsigned drained_hops = 0;
+        while (audio_capture_stream_bytes_available() > drain_target) {
+            size_t dn = audio_capture_read(pcm, MEL_HOP_SAMPLES, 0);
+            if (dn < MEL_HOP_SAMPLES) break;
+            mel_features_push(pcm, dn);
+            drained_hops++;
+            if (drained_hops > 200) break;  /* belt-and-braces bound */
+        }
 
         mel_features_take_patch(patch, scale, zp);
 
@@ -340,7 +366,12 @@ void app_main(void)
     ESP_ERROR_CHECK(audio_capture_init(CONFIG_CRY_DETECT_SAMPLE_RATE, CONFIG_CRY_DETECT_MIC_GAIN_DB));
     breadcrumb_set("audio_up");
 
-    detector_init(0.65f, CONFIG_CRY_DETECT_CONSEC_FRAMES, CONFIG_CRY_DETECT_HOLD_MS,
+    /* 0.70 is a cry_conf (sigmoid-of-dequant) threshold chosen from
+     * replay_yamnet.py against the fixed-dense-layer model: incident
+     * files saturate at 0.718, bench (speech) max at 0.622 — 0.70
+     * sits in the middle with headroom on both sides. See
+     * docs/research/training-epic-plan-20260419.md §7a. */
+    detector_init(0.70f, CONFIG_CRY_DETECT_CONSEC_FRAMES, CONFIG_CRY_DETECT_HOLD_MS,
                   on_detector_state, NULL);
 
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED
@@ -382,6 +413,11 @@ void app_main(void)
     ESP_ERROR_CHECK(auto_trigger_init());
 #endif
 
+    /* Periodic SD log pruner for infer-YYYYMMDD.jsonl / cry-YYYYMMDD.log.
+     * Independent of the event recorder (WAV retention lives there).
+     * Skips while NTP unsynced — no way to mis-date today's file. */
+    ESP_ERROR_CHECK(log_retention_init());
+
     /* Create deferred-log queue before network starts so on_net_state's
      * first firing has somewhere to post (see P0 #1 in audit doc). */
     s_deferred_log_q = xQueueCreate(8, sizeof(deferred_log_evt_t));
@@ -389,16 +425,20 @@ void app_main(void)
         ESP_LOGE(TAG, "deferred-log queue create failed");
     }
 
-    /* network_start must run before web_ui_start so LWIP is initialized.
-     * inference_task starts BEFORE web_ui_start, so web_ui_push_event
-     * must NULL-guard its internal lock (see web_ui.c). */
-    ESP_ERROR_CHECK(network_start("cry-detect-01", on_net_state, NULL));
-
+    /* Start inference BEFORE network_start: example_connect's "wait for IP"
+     * blocks ~7 s on a typical DHCP handshake, during which the audio
+     * producer otherwise pumps 7 s × 32 KB/s straight into a ring the
+     * consumer isn't draining yet. Infer has no Wi-Fi dependency. */
     if (s_yamnet_up) {
         xTaskCreatePinnedToCore(inference_task, "infer", 8 * 1024, NULL, 5, NULL, 1);
     } else {
         ESP_LOGW(TAG, "skipping inference task: no model");
     }
+
+    /* network_start must run before web_ui_start so LWIP is initialized.
+     * web_ui_push_event must NULL-guard its internal lock because infer is
+     * already publishing by the time web_ui_start runs (see web_ui.c). */
+    ESP_ERROR_CHECK(network_start("cry-detect-01", on_net_state, NULL));
 
 #if CONFIG_CRY_DETECT_WEB_UI_ENABLED
     ESP_ERROR_CHECK(web_ui_start(CONFIG_CRY_DETECT_SSE_MAX_CLIENTS));

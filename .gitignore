@@ -28,8 +28,12 @@ projects/*/sdkconfig.defaults
 __pycache__/
 *.pyc
 .venv/
+.venv-analysis/
 venv/
 /logs/
+projects/*/.cache/
+projects/*/tools/.models-backup/
+projects/*/tools/.yamnet_work/
 
 # Claude Code runtime state
 .claude/scheduled_tasks.lock

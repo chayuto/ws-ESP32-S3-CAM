@@ -17,6 +17,7 @@ idf_component_register(
         "metrics_logger.c"
         "breadcrumb.c"
         "auto_trigger.c"
+        "log_retention.c"
     INCLUDE_DIRS
         "."
     EMBED_TXTFILES
