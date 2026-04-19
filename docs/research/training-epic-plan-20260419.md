@@ -579,6 +579,21 @@ reached); zero alerts (threshold 0.70, peak cry was 0.591).
 moved, record the timestamp here so future log readers can split
 pre/post-move data cleanly.
 
+**Move to bedroom: 2026-04-19 ~21:56 AEST.** Post-move signature
+(first poll at 21:56:12):
+
+- rms=92, floor_p95=184 (matches bedroom soak baseline from earlier
+  today before the §7g reflash — validates the mic/floor behaviour
+  is consistent with the bedroom environment)
+- overrun=1 (vs. 381 accumulated in 2 h living-room soak — bedroom
+  has much less sustained audio pressure on the ring)
+- Watched classes all at INT8 noise floor (0.500/0.517) — correct
+  for a quiet empty-bedroom moment
+- fps=1.46, heap/psram flat, state=idle
+
+Overnight-2 ground-truth capture starts from here. Any activation
+≥ 0.60 or auto-trigger fire after 21:56 is bedroom-context data.
+
 ## 8. Deliverables
 
 - This doc, committed.
