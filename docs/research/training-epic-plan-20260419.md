@@ -537,6 +537,48 @@ Not urgent enough for tonight but worth planning:
    tag (parent review), keep that subset as the gold set. Defer
    until Stage 2 collection is stable.
 
+## 7k. Post-flash living-room soak — measurement context 2026-04-19 20:00 AEST onward
+
+Context for any future reader interpreting today's post-20:00 on-device
+logs: the device was **not in the bedroom** during validation of the
+§7g drain fix. It was on a living-room surface with the mother/father
+present, TV/conversation continuous, and at least one cough event.
+This is the activity backdrop for every snapshot and metric captured
+from build `a895bfdc` (flashed 2026-04-19 19:50 AEST) until it is
+physically moved back to the bedroom.
+
+**What the room sounds like (per on-device classifier, 50 min window
+20:00–20:50):**
+
+| Class     | Hits (≥0.60) | Peak  | Character                              |
+|-----------|--------------|-------|----------------------------------------|
+| speech    | ~37          | 0.730 | Continuous TV/conversation throughout  |
+| cough     | 3            | 0.718 | Single loud cough @ 20:49 + 2 tail     |
+| cry_baby  | 1 (brief)    | 0.591 | Sub-snapshot hit @ 20:50:50, post-cough |
+
+RMS 20–729; floor_p95 settled to 515 after ~15 min warm-up; no
+auto-trigger fires (5× floor arm requires rms > 2575 which nothing
+reached); zero alerts (threshold 0.70, peak cry was 0.591).
+
+**Why this matters for calibration:**
+
+- The §7g fix is validated *in a noisy living-room environment*, not
+  in isolation-booth conditions. Speech class saturating at 0.730 and
+  coexisting cleanly with zero cry_baby activations across 37 speech
+  snapshots confirms discrimination, not just pipeline health.
+- The bedroom-soak baseline (§7f) was 80–115 RMS on a flat floor.
+  Living-room baseline is 20–729 with near-continuous speech. Floor
+  tracking, auto-trigger ratios, and any threshold choices based on
+  bedroom numbers will behave differently in this environment.
+- The single cry_baby=0.591 hit at 20:50:50 has only 0.018 headroom
+  below the saturation ceiling (0.718). A real cry needs to push to
+  that ceiling to clear the 0.70 alert threshold. This is tight.
+  Revisit threshold after the first unambiguous cry capture.
+
+**Before overnight-2:** device must be moved to the bedroom. When
+moved, record the timestamp here so future log readers can split
+pre/post-move data cleanly.
+
 ## 8. Deliverables
 
 - This doc, committed.
