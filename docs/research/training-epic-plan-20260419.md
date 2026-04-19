@@ -579,20 +579,32 @@ reached); zero alerts (threshold 0.70, peak cry was 0.591).
 moved, record the timestamp here so future log readers can split
 pre/post-move data cleanly.
 
-**Move to bedroom: 2026-04-19 ~21:56 AEST.** Post-move signature
-(first poll at 21:56:12):
+**Move to bedroom: 2026-04-19 21:07:27 AEST** (the physical move
+caused the "auto-reboot" my monitor caught at 21:07:56 — unplug /
+move / replug explains the clean ~30 s gap and resolves the
+"isolated reboot" concern from the earlier log analysis).
+
+All post-21:07:27 on-device data is bedroom-context. The living-room
+window is **19:50 AEST (flash) → 21:07:27 AEST (move)**, ~77 min.
+The bedroom window starts at 21:07:27 and is ongoing.
+
+Bedroom signature (confirmed at 21:56:12, ~49 min into the bedroom
+session):
 
 - rms=92, floor_p95=184 (matches bedroom soak baseline from earlier
-  today before the §7g reflash — validates the mic/floor behaviour
-  is consistent with the bedroom environment)
-- overrun=1 (vs. 381 accumulated in 2 h living-room soak — bedroom
-  has much less sustained audio pressure on the ring)
-- Watched classes all at INT8 noise floor (0.500/0.517) — correct
-  for a quiet empty-bedroom moment
+  today before the §7g reflash — mic/floor behaviour is consistent
+  across the reflash and environment switch)
+- overrun=1 total across the full 49 min (vs. 381 in the 77 min
+  living-room session on the same build — bedroom has vastly less
+  sustained audio pressure on the ring; §7d tail is largely a
+  noisy-environment artefact)
+- Watched classes mostly at INT8 noise floor; some real activations
+  likely captured (e.g. any speech near the mic during the move)
 - fps=1.46, heap/psram flat, state=idle
 
-Overnight-2 ground-truth capture starts from here. Any activation
-≥ 0.60 or auto-trigger fire after 21:56 is bedroom-context data.
+Overnight-2 ground-truth capture is running from 21:07:27 onward.
+Any activation ≥ 0.60 or auto-trigger fire in this window is
+bedroom-context data.
 
 ## 8. Deliverables
 
