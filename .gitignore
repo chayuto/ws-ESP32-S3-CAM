@@ -38,3 +38,6 @@ projects/*/tools/.yamnet_work/
 # Claude Code runtime state
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
+
+# Personal drafts, negotiation notes, anything not for publication
+docs/private/
