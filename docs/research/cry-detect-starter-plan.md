@@ -120,4 +120,4 @@ Stages 1–3 are all pretrained-only. Stage 4 is the first time a training step 
 - [`esp-tflite-micro` component](https://components.espressif.com/components/espressif/esp-tflite-micro)
 - [ESP-SR Audio Front-end (S3)](https://docs.espressif.com/projects/esp-sr/en/latest/esp32s3/audio_front_end/README.html)
 - Companion doc: `crying-detection-s3-ml-alternatives.md` (this dir)
-- Sibling C6 research: `/Users/chayut/repos/ESP32-C6-Touch-AMOLED-1.8/14-crying-detection-research.md`
+- Sibling C6 research: `<sibling-C6-repo>/14-crying-detection-research.md`

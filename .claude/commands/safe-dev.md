@@ -41,7 +41,7 @@ Before every flash, tick these:
 6. Probe HTTP (/healthz or /metrics) — if HTTP up, system is alive enough
 7. If HTTP down after 30 s, ONE serial read is justified — capture for 20 s to catch a crash cycle
 8. If backtrace appears, addr2line it immediately:
-   /Users/chayut/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line \
+   $HOME/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line \
      -pfiaC -e /tmp/ws-cry-detect-01-build/cry-detect-01.elf <addr1> <addr2> ...
 9. If stable, commit, then add next subsystem
 ```
@@ -61,7 +61,7 @@ Before every flash, tick these:
 
 Order of checks (fastest first):
 1. `ping -c 2 192.168.1.100` — if "Host is down", ARP failed → device off-network
-2. `arp -a | grep 1c:db:d4:48:f4:fc` — if `(incomplete)`, device MAC not on LAN
+2. `arp -a | grep "$DEVICE_MAC"` — if `(incomplete)`, device MAC not on LAN
 3. `ping -c 2 cry-detect-01.local` — mDNS fallback
 4. **Only then:** one controlled serial read (20 s window, DTR/RTS off in pyserial)
 

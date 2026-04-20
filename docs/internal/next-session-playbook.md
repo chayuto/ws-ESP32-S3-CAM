@@ -8,9 +8,9 @@ The goal: capture what actually happened during the offline window. Do **not** r
 
 ### Step 0.1 — monitor log snapshot
 ```bash
-cp /Users/chayut/repos/ws-ESP32-S3-CAM/logs/monitor-$(date +%Y%m%d).log \
-   /Users/chayut/repos/ws-ESP32-S3-CAM/logs/monitor-session1-snapshot.log
-wc -l /Users/chayut/repos/ws-ESP32-S3-CAM/logs/monitor-session1-snapshot.log
+cp ./logs/monitor-$(date +%Y%m%d).log \
+   ./logs/monitor-session1-snapshot.log
+wc -l ./logs/monitor-session1-snapshot.log
 ```
 Expect ~1 row per minute. Scan for `REBOOT`, `NEW-ALERT`, `WIFI-DROP`, `UNREACHABLE` / `RECOVERED` markers.
 
@@ -25,14 +25,14 @@ Confirm: `uptime_s`, `alert_count`, `inference_count`, heap/psram (leak check), 
 The device may have `SD_MOUNT_POINT` at `/sdcard`. We don't have a file-download endpoint yet, so physical card removal is the path:
 1. Power off device (unplug).
 2. Remove SD card.
-3. Insert into Mac → copy `/Volumes/<sd>/cry-*.log` and `/Volumes/<sd>/events/` to `/Users/chayut/repos/ws-ESP32-S3-CAM/logs/sd-session1/`.
+3. Insert into Mac → copy `/Volumes/<sd>/cry-*.log` and `/Volumes/<sd>/events/` to `./logs/sd-session1/`.
 4. **Don't put the card back yet** — analyse first.
 
 ### Step 0.4 — cross-reference monitor log vs SD log
 The monitor row's `up=Xs` should match a row in the SD file at uptime_s=X. Sanity-check one ping-able event (e.g. a REBOOT, or `wifi_up`):
 ```bash
-grep "^up=" /Users/chayut/repos/ws-ESP32-S3-CAM/logs/sd-session1/cry-*.log | head -20
-grep REBOOT /Users/chayut/repos/ws-ESP32-S3-CAM/logs/monitor-session1-snapshot.log
+grep "^up=" ./logs/sd-session1/cry-*.log | head -20
+grep REBOOT ./logs/monitor-session1-snapshot.log
 ```
 
 ## Things already staged for flash (built, not flashed)

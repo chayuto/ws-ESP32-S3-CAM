@@ -73,7 +73,7 @@
 2. Pull the day's JSONL for analysis:
    ```bash
    TS=$(date -u +%Y%m%dT%H%M%SZ)
-   DIR=/Users/chayut/repos/ws-ESP32-S3-CAM/logs/cry-detect-01-export-$TS
+   DIR=./logs/cry-detect-01-export-$TS
    mkdir -p $DIR
    curl -s "http://192.168.1.100/files/get?path=/sdcard/infer-$(date +%Y%m%d).jsonl" \
      -o $DIR/infer.jsonl

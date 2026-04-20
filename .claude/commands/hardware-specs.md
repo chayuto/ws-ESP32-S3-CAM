@@ -7,7 +7,7 @@ Read this before writing any code that touches peripherals, memory, Wi-Fi, camer
 ## Chip
 
 - **ESP32-S3** Xtensa LX7, **dual-core** @ 240 MHz — confirmed `cpu_freq: 240000000 Hz`
-- Chip rev **v0.2**, efuse block rev **v1.3**, QFN56, MAC `1c:db:d4:48:f4:fc`
+- Chip rev **v0.2**, efuse block rev **v1.3**, QFN56
 - FPU (single-precision), SIMD (PIE vector), WiFi 4 + BLE 5. **No 802.15.4**
 - Dual-core → `xTaskCreatePinnedToCore()` is valid; pin Wi-Fi to 0, app to 1 for jitter isolation
 

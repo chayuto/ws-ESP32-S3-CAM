@@ -314,5 +314,5 @@ Total perceived boot: ~1 s before audio starts capturing; Wi-Fi/NTP come online 
 - Vendor BSP impl: same dir, `esp32_s3_cam_ovxxxx.c`
 - Reference audio pipeline: `02_esp_sr/main/speech_det_driver/mic_speech.c`
 - Partition/kconfig: `02_esp_sr/partitions.csv`, `02_esp_sr/sdkconfig`
-- C6 SD/display sharing post-mortem: `/Users/chayut/repos/ESP32-C6-Touch-AMOLED-1.8/18-sd-display-spi-sharing.md`
-- Hardware specs: `/Users/chayut/repos/ws-ESP32-S3-CAM/.claude/commands/hardware-specs.md`
+- C6 SD/display sharing post-mortem: `<sibling-C6-repo>/18-sd-display-spi-sharing.md`
+- Hardware specs: `./.claude/commands/hardware-specs.md`

@@ -100,7 +100,7 @@ Rule: **if pyserial and the chip disagree about reset state, PHYSICAL power cycl
 Once a crash log is captured, resolve `Backtrace: 0xAAAA:0xBBBB 0xCCCC:0xDDDD …` to function names:
 
 ```zsh
-/Users/chayut/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line \
+$HOME/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line \
     -pfiaC -e /tmp/ws-cry-detect-01-build/cry-detect-01.elf  <addr1> <addr2> …
 ```
 

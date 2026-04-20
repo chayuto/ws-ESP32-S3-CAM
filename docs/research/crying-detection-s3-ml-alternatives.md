@@ -1,6 +1,6 @@
 # Crying detection on ESP32-S3 — ML approaches *not* covered in the C6 project
 
-Companion to `/Users/chayut/repos/ESP32-C6-Touch-AMOLED-1.8/14-crying-detection-research.md` (the C6 investigation, dated 2026-04-04). That doc landed on **TFLite Micro + MFCC + small CNN (Architecture C)** under C6 constraints (160 MHz single-core, no PSRAM, no FPU, no SIMD). This one maps the ML design space **S3 opens up that C6 had to reject** — so the S3 project can avoid rehashing the same path.
+Companion to `<sibling-C6-repo>/14-crying-detection-research.md` (the C6 investigation, dated 2026-04-04). That doc landed on **TFLite Micro + MFCC + small CNN (Architecture C)** under C6 constraints (160 MHz single-core, no PSRAM, no FPU, no SIMD). This one maps the ML design space **S3 opens up that C6 had to reject** — so the S3 project can avoid rehashing the same path.
 
 > Scope: audio-focused ML alternatives to the C6 recipe. Hardware baseline assumed: Waveshare ESP32-S3-CAM-GC2145 (dual-core LX7 @ 240 MHz, 8 MB PSRAM, PIE vector SIMD, FPU, ES8311 DAC, ES7210 4-ch ADC with dual PDM MEMS mics, GC2145 camera). Verified 2026-04-17.
 
@@ -206,4 +206,4 @@ The C6 doc's core recommendation still works on S3 — it just stops being *nece
 - [avidadearthur/esp32-baby-monitor](https://github.com/avidadearthur/esp32-baby-monitor)
 
 **Companion research**
-- Sibling C6 investigation: `/Users/chayut/repos/ESP32-C6-Touch-AMOLED-1.8/14-crying-detection-research.md`
+- Sibling C6 investigation: `<sibling-C6-repo>/14-crying-detection-research.md`

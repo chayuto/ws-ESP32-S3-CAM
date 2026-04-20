@@ -23,7 +23,7 @@ ws-ESP32-S3-CAM/
 └── projects/                # YOUR projects — one directory each (not yet created)
 ```
 
-## Board Facts (verified on this unit, MAC `1c:db:d4:48:f4:fc`)
+## Board Facts (verified on this unit)
 
 - **Chip:** ESP32-S3 rev v0.2, QFN56, dual-core Xtensa LX7 @ 240 MHz
 - **PSRAM:** 8 MB OPI (AP Memory gen-3, 80 MHz, ~7.5 MB free to heap)
@@ -157,5 +157,5 @@ Change wake word via menuconfig → `CONFIG_SR_WN_*` (Hi ESP / Hi Lexin / Alexa 
 
 - ESP-IDF v5.5.3 toolchain builds vendor examples 01 and 02 after deleting the stale `dependencies.lock`
 - Board at `/dev/cu.usbmodem3101`, chip probe confirms ESP32-S3 rev v0.2 + 8 MB PSRAM + 16 MB flash
-- `01_simple_video_server` — GC2145 detected, joined Wi-Fi `Wombat`, DHCP `192.168.1.100`, MJPEG stream live on port 81 @ 320×240 @ ~13 fps
+- `01_simple_video_server` — GC2145 detected, joined Wi-Fi, DHCP on local LAN, MJPEG stream live on port 81 @ 320×240 @ ~13 fps
 - `02_esp_sr` — ES7210 detected, WakeNet wn9_hiesp loaded from SPIFFS `model` partition, AFE pipeline running, listening for "Hi ESP"
