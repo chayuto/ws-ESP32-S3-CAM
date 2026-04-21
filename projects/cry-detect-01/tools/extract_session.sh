@@ -85,14 +85,16 @@ for e in d.get('entries', []):
         target=""
         if [[ "$f" == *.wav ]]; then
             target="$WAV_DIR/$f"
+            if [[ -f "$target" ]]; then
+                # WAVs are immutable once closed — skip if already mirrored.
+                continue
+            fi
         elif [[ "$f" == "triggers.jsonl" ]]; then
+            # Appended to on the device — always refresh.
             target="$SESSION_DIR/$f"
+            rm -f "$target"
         else
             continue  # skip unknown entries
-        fi
-        if [[ -f "$target" ]]; then
-            # Assume existing file is complete (we don't checksum here).
-            continue
         fi
         sz=$(curl -sL --max-time 120 -o "$target" -w "%{size_download}" \
              "$HOST/files/get?path=/sdcard/events/$f") || { echo "FAIL $f"; continue; }
