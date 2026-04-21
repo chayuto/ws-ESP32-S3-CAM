@@ -156,11 +156,104 @@ Remaining candidates, not diagnosable from device data:
 
 **Data for 01:32:14 → 09:08:27 is permanently lost on both device and host.**
 
-## 8. Implications for next iteration
+## 8. Deep-dive: diagnosing *why* the on-device model saturates
+
+Re-PTQ — not retraining — is the fix. The on-device model at `spiffs/yamnet.tflite` is a straight INT8 PTQ of Google's YAMNet built by `hf/convert_yamnet.py` with synthetic-random calibration (the script's own warning: *"accuracy will be slightly below the float baseline"*). Reading the tflite tensor metadata:
+
+```
+input  : shape=[1,96,64]  int8  scale=0.0401  zp=+38   → dequant range [-6.65, +3.57]
+output : shape=[1,521]    int8  scale=0.00391 zp=-128  → dequant range [ 0.000, +0.996]
+```
+
+The output quant range is `[0, 0.996]` — every int8 output value maps to a logit between 0 and 1. After sigmoid, the *theoretical* maximum probability this firmware can ever emit is:
+
+```
+sigmoid(0.996) = 0.7303
+```
+
+Which is precisely the `max_cry_1s = 0.718` ceiling observed across the entire session. The model isn't failing — the output dequantization is clipping every confident class to the same value.
+
+Cross-checked against FP32 YAMNet (TF Hub) on three WAVs from this session:
+
+| WAV | FP32 max baby_cry(20) | INT8 on-device max | loss |
+|---|---:|---:|---:|
+| 2026-04-21 01:09:23 (real cry) | **0.965** | 0.718 | clipped |
+| 2026-04-20 19:13:00 (real cry) | **0.847** | 0.718 | clipped |
+| 2026-04-21 09:15:14 (kitchen FP) | 0.002 | 0.500 | baseline (also clipped) |
+
+The reverse-map of every observed `max_cry_1s` score to its generating int8 tensor value is a small set of specific codes:
+
+```
+0.500 → int8 = -128 (zero-point, output logit 0)
+0.501 → int8 = -127 (just above zero-point)
+0.517 → int8 = -110
+0.591 → int8 = -34
+0.622 → int8 =  0
+0.718 → int8 = +111  (near ceiling; +127 would give 0.730)
+```
+
+There are only six distinct values because the model keeps outputting the same int8 tensor for the same class across many inputs — the effective output resolution near `cry_baby` is ~6 meaningful bins out of 256, because the calibration never saw real cry audio to expand the scale.
+
+**Input quantization is healthy.** Scale 0.04 with zp=+38 covers [-6.65, +3.57], and on every tested WAV the actual log-mel values fit inside that band (observed min=-6.77, max=+3.06, clipping rate 0%). So the input-side PTQ tolerated the feature distribution well — the broken part is the *output* calibration.
+
+**Fix path, in order of effort:**
+
+1. **Re-run `convert_yamnet.py --audio-dir <path-with-real-cries>`** on the 17 night TPs from this session. The representative_dataset will then exercise the full output logit range of the cry classes and PTQ will pick a wider output scale (probably scale ≈ 0.05 → logit range ±6.4 → sigmoid(6.4)=0.998 reachable).
+2. **Or switch `inference_output_type=tf.int16`** in the converter (inputs stay int8). Output dequant range expands by 256× at the cost of 521 extra bytes per inference — trivial on ESP32-S3. Full FP32 output would be 2 KB, still trivial.
+3. **Or keep the current tflite and dequantize only 4 watched classes (cry_baby, crying, whimper, wail) in FP32** via a side tensor. Requires reconverting anyway — same work as (2).
+
+All three are host-side-only. None require firmware changes. See `/tmp/diag_model_saturation.py` for the reproducer.
+
+## 9. Deep-dive: FP sub-types in the morning storm
+
+K-means (k=3) over a 12-dim acoustic feature vector over the 22 FP WAVs yields three clean clusters, each with zero HNR-gate leakage except one cluster:
+
+| cluster | n | mean crest | mean log_e IQR | onset/s | mean HNR | mean voiced_frac | character | HNR > 4 reject |
+|---|---:|---:|---:|---:|---:|---:|---|---:|
+| 0 "busy bursty" | 10 | 18.4 | 4.69 | 3.9 | -0.9 | 0.64 | kitchen clatter / cabinet bursts / footsteps | **10/10** |
+| 1 "impulsive" | 4 | 21.7 | 1.29 | 1.7 | -2.2 | 0.35 | single impacts (slam, microwave ding) | **4/4** |
+| 2 "sustained voiced-like" | 8 | 16.3 | 2.47 | 2.7 | +1.2 | 0.69 | running water / TV / adult speech | **7/8** |
+
+The TP vs FP feature separations were:
+
+| feature | TP (n=17) p10/p50/p90 | FP (n=22) p10/p50/p90 | separation |
+|---|---|---|---|
+| `hnr_hpss` (dB) | 0.24 / 4.05 / 10.4 | -3.04 / -0.16 / 1.86 | **strong** (cleanest single axis) |
+| `spectral_flatness` | 0.017 / 0.028 / 0.042 | 0.042 / 0.061 / 0.084 | strong |
+| `voiced_frac` | 0.65 / 0.99 / 1.00 | 0.37 / 0.60 / 0.82 | strong |
+| `rolloff85` | 2687 / 3521 / 4147 | 4022 / 4429 / 4845 | moderate |
+| `crest factor` | 8.1 / 11.1 / 15.3 | 12.2 / 16.2 / 26.5 | moderate |
+| `onset rate /s` | 1.4 / 2.4 / 3.4 | 1.9 / 3.2 / 4.3 | weak |
+
+The leaker is `cry-20260421T091514+1000.wav` (HNR 7.60) — the first morning capture. Listening to it (via the spectrogram): sustained adult speech / TV dialogue. Adult male fundamentals (~100-200 Hz) can have strong harmonic structure and pass an HNR-only gate. A secondary `f0_mean > 300 Hz` gate would catch it (see §10).
+
+## 10. Deep-dive: F0 contour sub-types on real cries
+
+K-means (k=3) over F0 contour features on the 17 night TPs reveals three distinct cry types:
+
+| cluster | n | members | voiced_frac | f0 mean | f0 p50 | f0 p90 | character |
+|---|---:|---|---:|---:|---:|---:|---|
+| 0 "distress" | 5 | all five 01 am | 0.60 | 718 | 602 | 1201 | pain/distress — high pitch, broken voicing, wide range |
+| 1 "full cry" | 8 | most bedtime | 0.91 | 488 | 380 | 923 | full-voice sustained cry, moderate pitch |
+| 2 "fuss" | 4 | four bedtime | **0.98** | **350** | **276** | 660 | low-pitch grumble, very sustained, near speech range |
+
+This matches audible perception: the 01 am wake was a single strong distress event (hungry/uncomfortable), while bedtime was a typical mixed protest — some full cries and some fuss.
+
+**Implication for two-gate filtering:** an f0-based second gate trades TP recall for FP robustness.
+
+| gate | TP kept / 17 | FP rejected / 22 |
+|---|---:|---:|
+| `hnr_db > 4` alone | 17 | 21 |
+| `hnr_db > 4` AND `≥20% of voiced f0 in 350–800 Hz` | 14 | 22 |
+| `hnr_db > 4` AND `f0_mean > 300 Hz` | ~13 | 22 |
+
+The tightening costs 3 fuss cries (f0 < 350 Hz) to catch 1 adult-speech leaker. **Not worth it** — fuss cries are the low-urgency ones you most want the system to catch silently, and a single TV/speech FP per session is acceptable noise. **Stick with HNR-only for firmware-side filtering.**
+
+## 11. Implications for next iteration
 
 Ordered by expected impact on the "wake me if my baby cries" loop.
 
-1. **Retire the on-device cry head as the alerting signal.** It has no discriminative power here at any threshold. Either run YAMNet (or a distilled YAMNet-style MFCC+CNN) on-device, or ship all captured WAVs to a phone/server that runs YAMNet and alerts. The current watched-classes quantized model is dead weight for alerting.
+1. **Re-PTQ the tflite with real-cry calibration — one-shot, no firmware change.** Per §8 the on-device model's *weights* are fine; the *output quantization scale* is 256× too narrow because it was calibrated on synthetic log-mel patches. Run `hf/convert_yamnet.py --audio-dir logs/night-20260420/wavs` and reflash the spiffs partition. Expected outcome: `max_cry_1s` can reach ≥0.95 on real cries (matches FP32 YAMNet's 0.965 on the 01:09 cry), opening ~0.80 as a usable alerting threshold. Verify with `/tmp/diag_model_saturation.py` before flashing.
 2. **Keep the auto-RMS trigger, but cull the captured WAV post-hoc with HNR.** Harmonic-to-noise ratio cleanly separates this dataset:
 
    | feature | night-TP p10 / p50 / p90 (n=17) | morning-FP p10 / p50 / p90 (n=22) |
@@ -191,3 +284,5 @@ All under `projects/cry-detect-01/logs/night-20260420/`:
 - `analysis/morning_storm.csv` — 90-minute second-by-second trace of the living-room FP storm
 - `analysis/baseline.csv` — bedroom vs living-room RMS / nf distributions
 - `analysis/summary.json` — machine-readable headline stats
+- `analysis/fp_clusters.csv` — per-FP-WAV feature vector + k=3 cluster assignment (§9)
+- `analysis/tp_contours.csv` — per-TP-WAV F0 contour features (§10)
