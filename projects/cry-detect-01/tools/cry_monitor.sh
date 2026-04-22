@@ -128,10 +128,13 @@ print(d.get('uptime_s',0), d.get('state','?'),
     fi
 
     # ---------- new WAV captured ----------
+    # Fire only on increments; decrements mean ring-retention deleted an
+    # old WAV (benign, not worth paging on).
     rs=$(curl -s -m 3 "$HOST/record/status" 2>/dev/null)
     if [ -n "$rs" ]; then
         wav_count=$(echo "$rs" | python3 -c "import sys,json; print(json.load(sys.stdin).get('wav_count','?'))" 2>/dev/null)
-        if [ -n "$prev_wav_count" ] && [ "$wav_count" != "$prev_wav_count" ] && [ "$wav_count" != "?" ]; then
+        if [ -n "$prev_wav_count" ] && [ "$wav_count" != "?" ] && [ "$prev_wav_count" != "?" ] \
+           && [ "$wav_count" -gt "$prev_wav_count" ] 2>/dev/null; then
             anom "$ts" "NEW_WAV count $prev_wav_count → $wav_count (rms=$rms cm1s=$cm1s state=$state)"
         fi
         prev_wav_count=$wav_count

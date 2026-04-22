@@ -1,0 +1,1866 @@
+{
+  "_schema": {
+    "version": "v1",
+    "type": "dataset_release"
+  },
+  "release_id": "cry-v0.0-exploratory",
+  "frozen_at": "2026-04-23T09:12:15.728727+10:00",
+  "git_head_sha": "9ba42f4a",
+  "device_id": "cry-detect-01",
+  "n_captures": 203,
+  "sessions": [
+    "night-20260420",
+    "night-20260421",
+    "night-20260422"
+  ],
+  "splits": {
+    "train": 123,
+    "val": 40,
+    "test": 40
+  },
+  "label_distribution_auto": {
+    "borderline_cry": 7,
+    "speech": 83,
+    "cry": 102,
+    "other": 8,
+    "mixed": 3
+  },
+  "label_source": "yamnet_auto_only_no_human",
+  "notes": "v0.0-exploratory \u2014 first frozen snapshot. Labels are YAMNet-only (no human review yet). Intended for tooling dry-runs and dataset infrastructure bring-up, NOT for model training. The sessions span firmware builds a895bfdc, a4870a21, 4af50c57 \u2014 any model training on this release should filter on build_sha or avoid using dev-side cry_conf as a feature.",
+  "captures": [
+    {
+      "file": "cry-20260418T165723+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-18T16:57:23+10:00",
+      "split": "train",
+      "label_auto": "borderline_cry",
+      "label_human": "",
+      "yam_cry_max": 0.38793399930000305
+    },
+    {
+      "file": "cry-20260418T170059+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-18T17:00:59+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.08290789276361465
+    },
+    {
+      "file": "cry-20260418T181217+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-18T18:12:17+10:00",
+      "split": "train",
+      "label_auto": "borderline_cry",
+      "label_human": "",
+      "yam_cry_max": 0.37423059344291687
+    },
+    {
+      "file": "cry-20260418T181954+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-18T18:19:54+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.07817739248275757
+    },
+    {
+      "file": "cry-20260418T190211+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-18T19:02:11+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.008680729195475578
+    },
+    {
+      "file": "cry-20260418T190439+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-18T19:04:39+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.03307637572288513
+    },
+    {
+      "file": "cry-20260418T191854+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-18T19:18:54+10:00",
+      "split": "train",
+      "label_auto": "borderline_cry",
+      "label_human": "",
+      "yam_cry_max": 0.41551724076271057
+    },
+    {
+      "file": "cry-20260418T192021+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-18T19:20:21+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.24369211494922638
+    },
+    {
+      "file": "cry-20260419T045426+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T04:54:26+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9916559457778931
+    },
+    {
+      "file": "cry-20260419T045502+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T04:55:02+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9933263659477234
+    },
+    {
+      "file": "cry-20260419T050032+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:00:32+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9973782896995544
+    },
+    {
+      "file": "cry-20260419T050236+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:02:36+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9985092878341675
+    },
+    {
+      "file": "cry-20260419T050339+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:03:39+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9986523985862732
+    },
+    {
+      "file": "cry-20260419T050417+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:04:17+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9825984239578247
+    },
+    {
+      "file": "cry-20260419T050448+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:04:48+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9919276833534241
+    },
+    {
+      "file": "cry-20260419T050605+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:06:05+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9860315918922424
+    },
+    {
+      "file": "cry-20260419T050638+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:06:38+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9916576743125916
+    },
+    {
+      "file": "cry-20260419T050711+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:07:11+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9881392121315002
+    },
+    {
+      "file": "cry-20260419T050853+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:08:53+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9953877329826355
+    },
+    {
+      "file": "cry-20260419T050940+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:09:40+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9956609606742859
+    },
+    {
+      "file": "cry-20260419T051049+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:10:49+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9913282990455627
+    },
+    {
+      "file": "cry-20260419T051150+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T05:11:50+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9885124564170837
+    },
+    {
+      "file": "cry-20260419T101712+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T10:17:12+10:00",
+      "split": "train",
+      "label_auto": "borderline_cry",
+      "label_human": "",
+      "yam_cry_max": 0.4832683205604553
+    },
+    {
+      "file": "cry-20260419T110432+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T11:04:32+10:00",
+      "split": "val",
+      "label_auto": "other",
+      "label_human": "",
+      "yam_cry_max": 2.764026222501033e-24
+    },
+    {
+      "file": "cry-20260419T124206+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T12:42:06+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.5483709573745728
+    },
+    {
+      "file": "cry-20260419T124631+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T12:46:31+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.8568056225776672
+    },
+    {
+      "file": "cry-20260419T124816+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T12:48:16+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9144179224967957
+    },
+    {
+      "file": "cry-20260419T125254+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T12:52:54+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0970662459731102
+    },
+    {
+      "file": "cry-20260419T125547+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T12:55:47+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.013576694764196873
+    },
+    {
+      "file": "cry-20260419T130101+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:01:01+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0034467328805476427
+    },
+    {
+      "file": "cry-20260419T130209+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:02:09+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.002004144946113229
+    },
+    {
+      "file": "cry-20260419T130313+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:03:13+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.005052014719694853
+    },
+    {
+      "file": "cry-20260419T130414+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:04:14+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.015016003511846066
+    },
+    {
+      "file": "cry-20260419T130517+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:05:17+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0026376727037131786
+    },
+    {
+      "file": "cry-20260419T130620+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:06:20+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.031054919585585594
+    },
+    {
+      "file": "cry-20260419T130722+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:07:22+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0003865875187329948
+    },
+    {
+      "file": "cry-20260419T130824+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:08:24+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.004281037487089634
+    },
+    {
+      "file": "cry-20260419T130927+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:09:27+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.005898036528378725
+    },
+    {
+      "file": "cry-20260419T131029+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:10:29+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0046915397979319096
+    },
+    {
+      "file": "cry-20260419T131135+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:11:35+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0016503811348229647
+    },
+    {
+      "file": "cry-20260419T131237+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:12:37+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.005749376956373453
+    },
+    {
+      "file": "cry-20260419T131340+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:13:40+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.020142903551459312
+    },
+    {
+      "file": "cry-20260419T131446+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:14:46+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.00016172826872207224
+    },
+    {
+      "file": "cry-20260419T131548+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:15:48+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.07036831229925156
+    },
+    {
+      "file": "cry-20260419T131652+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:16:52+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0003501176543068141
+    },
+    {
+      "file": "cry-20260419T131754+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:17:54+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0043828170746564865
+    },
+    {
+      "file": "cry-20260419T131855+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:18:55+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.00021849189943168312
+    },
+    {
+      "file": "cry-20260419T131957+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:19:57+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0037000689189881086
+    },
+    {
+      "file": "cry-20260419T132059+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:20:59+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0024647132959216833
+    },
+    {
+      "file": "cry-20260419T132201+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:22:01+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.004692751448601484
+    },
+    {
+      "file": "cry-20260419T134705+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:47:05+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9958357810974121
+    },
+    {
+      "file": "cry-20260419T134738+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:47:38+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9469127058982849
+    },
+    {
+      "file": "cry-20260419T134820+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:48:20+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.998370885848999
+    },
+    {
+      "file": "cry-20260419T134922+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:49:22+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9985350966453552
+    },
+    {
+      "file": "cry-20260419T135122+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:51:22+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9973808526992798
+    },
+    {
+      "file": "cry-20260419T135226+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:52:26+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9722723364830017
+    },
+    {
+      "file": "cry-20260419T135407+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T13:54:07+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9854678511619568
+    },
+    {
+      "file": "cry-20260419T140148+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T14:01:48+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9973335862159729
+    },
+    {
+      "file": "cry-20260419T144259+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T14:42:59+10:00",
+      "split": "val",
+      "label_auto": "other",
+      "label_human": "",
+      "yam_cry_max": 0.012302047573029995
+    },
+    {
+      "file": "cry-20260419T200405+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T20:04:05+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9031288027763367
+    },
+    {
+      "file": "cry-20260419T201809+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T20:18:09+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9417279958724976
+    },
+    {
+      "file": "cry-20260419T202016+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T20:20:16+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.8324403762817383
+    },
+    {
+      "file": "cry-20260419T202324+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T20:23:24+10:00",
+      "split": "train",
+      "label_auto": "borderline_cry",
+      "label_human": "",
+      "yam_cry_max": 0.41868066787719727
+    },
+    {
+      "file": "cry-20260419T203932+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T20:39:32+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.1764610856771469
+    },
+    {
+      "file": "cry-20260419T204127+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T20:41:27+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.7839664220809937
+    },
+    {
+      "file": "cry-20260419T204525+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T20:45:25+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0014419174985960126
+    },
+    {
+      "file": "cry-20260419T204817+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T20:48:17+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.5799869894981384
+    },
+    {
+      "file": "cry-20260419T205425+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T20:54:25+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9795921444892883
+    },
+    {
+      "file": "cry-20260419T210007+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T21:00:07+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.08435062319040298
+    },
+    {
+      "file": "cry-20260419T210139+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-19T21:01:39+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.031629227101802826
+    },
+    {
+      "file": "cry-20260420T061402+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T06:14:02+10:00",
+      "split": "train",
+      "label_auto": "other",
+      "label_human": "",
+      "yam_cry_max": 6.843541996204294e-06
+    },
+    {
+      "file": "cry-20260420T062901+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T06:29:01+10:00",
+      "split": "train",
+      "label_auto": "other",
+      "label_human": "",
+      "yam_cry_max": 0.00010009999095927924
+    },
+    {
+      "file": "cry-20260420T063036+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T06:30:36+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9917363524436951
+    },
+    {
+      "file": "cry-20260420T063112+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T06:31:12+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.975384533405304
+    },
+    {
+      "file": "cry-20260420T083618+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T08:36:18+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.09436476975679398
+    },
+    {
+      "file": "cry-20260420T102611+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T10:26:11+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.10171934217214584
+    },
+    {
+      "file": "cry-20260420T102801+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T10:28:01+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.8977290391921997
+    },
+    {
+      "file": "cry-20260420T102959+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T10:29:59+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.65499347448349
+    },
+    {
+      "file": "cry-20260420T103126+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T10:31:26+10:00",
+      "split": "val",
+      "label_auto": "borderline_cry",
+      "label_human": "",
+      "yam_cry_max": 0.43836724758148193
+    },
+    {
+      "file": "cry-20260420T104136+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T10:41:36+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9911494255065918
+    },
+    {
+      "file": "cry-20260420T123001+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T12:30:01+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.08492713421583176
+    },
+    {
+      "file": "cry-20260420T184944+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T18:49:44+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.15169654786586761
+    },
+    {
+      "file": "cry-20260420T185117+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T18:51:17+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9230952262878418
+    },
+    {
+      "file": "cry-20260420T185838+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T18:58:38+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9899370074272156
+    },
+    {
+      "file": "cry-20260420T185947+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T18:59:47+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.6347320675849915
+    },
+    {
+      "file": "cry-20260420T190907+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:09:07+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.984616219997406
+    },
+    {
+      "file": "cry-20260420T191011+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:10:11+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9958996772766113
+    },
+    {
+      "file": "cry-20260420T191149+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:11:49+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9928322434425354
+    },
+    {
+      "file": "cry-20260420T191300+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:13:00+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9769884943962097
+    },
+    {
+      "file": "cry-20260420T192126+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:21:26+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9446620941162109
+    },
+    {
+      "file": "cry-20260420T194526+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:45:26+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9838088750839233
+    },
+    {
+      "file": "cry-20260420T194935+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:49:35+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9841658473014832
+    },
+    {
+      "file": "cry-20260420T195124+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:51:24+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.986416757106781
+    },
+    {
+      "file": "cry-20260420T195446+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:54:46+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.5471388101577759
+    },
+    {
+      "file": "cry-20260420T195552+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:55:52+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9955396056175232
+    },
+    {
+      "file": "cry-20260420T195658+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:56:58+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9893757700920105
+    },
+    {
+      "file": "cry-20260420T195954+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T19:59:54+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9898645877838135
+    },
+    {
+      "file": "cry-20260420T200101+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T20:01:01+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9983813166618347
+    },
+    {
+      "file": "cry-20260420T200206+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T20:02:06+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.998424768447876
+    },
+    {
+      "file": "cry-20260420T202228+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T20:22:28+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9909199476242065
+    },
+    {
+      "file": "cry-20260420T202326+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T20:23:26+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9987736940383911
+    },
+    {
+      "file": "cry-20260420T202357+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-20T20:23:57+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9975995421409607
+    },
+    {
+      "file": "cry-20260421T010404+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T01:04:04+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9905182719230652
+    },
+    {
+      "file": "cry-20260421T010923+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T01:09:23+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.997130811214447
+    },
+    {
+      "file": "cry-20260421T011043+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T01:10:43+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9953917860984802
+    },
+    {
+      "file": "cry-20260421T011517+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T01:15:17+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9926033020019531
+    },
+    {
+      "file": "cry-20260421T012015+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T01:20:15+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9968511462211609
+    },
+    {
+      "file": "cry-20260421T091514+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:15:14+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.007510062772780657
+    },
+    {
+      "file": "cry-20260421T091717+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:17:17+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.025568470358848572
+    },
+    {
+      "file": "cry-20260421T092012+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:20:12+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0026530944742262363
+    },
+    {
+      "file": "cry-20260421T092121+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:21:21+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.015544328838586807
+    },
+    {
+      "file": "cry-20260421T092424+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:24:24+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.007045114412903786
+    },
+    {
+      "file": "cry-20260421T092622+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:26:22+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.004328013863414526
+    },
+    {
+      "file": "cry-20260421T092745+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:27:45+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.00011028638982679695
+    },
+    {
+      "file": "cry-20260421T093223+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:32:23+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.01727260835468769
+    },
+    {
+      "file": "cry-20260421T093642+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:36:42+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0016612154431641102
+    },
+    {
+      "file": "cry-20260421T094430+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:44:30+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.083572618663311
+    },
+    {
+      "file": "cry-20260421T095134+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:51:34+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.014442027546465397
+    },
+    {
+      "file": "cry-20260421T095313+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:53:13+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.02464693784713745
+    },
+    {
+      "file": "cry-20260421T095420+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:54:20+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 1.2692269592662342e-05
+    },
+    {
+      "file": "cry-20260421T095532+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T09:55:32+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.000410580774769187
+    },
+    {
+      "file": "cry-20260421T100534+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T10:05:34+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.029742592945694923
+    },
+    {
+      "file": "cry-20260421T100752+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T10:07:52+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.016453338786959648
+    },
+    {
+      "file": "cry-20260421T101009+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T10:10:09+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.1394423097372055
+    },
+    {
+      "file": "cry-20260421T101117+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T10:11:17+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.000595217861700803
+    },
+    {
+      "file": "cry-20260421T101250+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T10:12:50+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.031114961951971054
+    },
+    {
+      "file": "cry-20260421T101446+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T10:14:46+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0014843513490632176
+    },
+    {
+      "file": "cry-20260421T101845+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T10:18:45+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.011330928653478622
+    },
+    {
+      "file": "cry-20260421T102011+1000.wav",
+      "session_id": "night-20260420",
+      "ts_iso": "2026-04-21T10:20:11+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.04808352142572403
+    },
+    {
+      "file": "cry-20260421T103139+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T10:31:39+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.21303723752498627
+    },
+    {
+      "file": "cry-20260421T110100+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T11:01:00+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.18612225353717804
+    },
+    {
+      "file": "cry-20260421T110208+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T11:02:08+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.00018967922369483858
+    },
+    {
+      "file": "cry-20260421T110316+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T11:03:16+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0037605587858706713
+    },
+    {
+      "file": "cry-20260421T110509+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T11:05:09+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.008311212062835693
+    },
+    {
+      "file": "cry-20260421T110709+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T11:07:09+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.00020839447097387165
+    },
+    {
+      "file": "cry-20260421T115610+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T11:56:10+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.009355993010103703
+    },
+    {
+      "file": "cry-20260421T115723+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T11:57:23+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0001955472689587623
+    },
+    {
+      "file": "cry-20260421T120046+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T12:00:46+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0008279362809844315
+    },
+    {
+      "file": "cry-20260421T120623+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T12:06:23+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0007703488226979971
+    },
+    {
+      "file": "cry-20260421T120812+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T12:08:12+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.001717766746878624
+    },
+    {
+      "file": "cry-20260421T141542+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T14:15:42+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0963071808218956
+    },
+    {
+      "file": "cry-20260421T145625+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T14:56:25+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0037733789067715406
+    },
+    {
+      "file": "cry-20260421T145941+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T14:59:41+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.019922755658626556
+    },
+    {
+      "file": "cry-20260421T150139+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:01:39+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0005780998035334051
+    },
+    {
+      "file": "cry-20260421T150253+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:02:53+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0018137922743335366
+    },
+    {
+      "file": "cry-20260421T150504+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:05:04+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 3.956924501835601e-06
+    },
+    {
+      "file": "cry-20260421T150606+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:06:06+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0002471068291924894
+    },
+    {
+      "file": "cry-20260421T150736+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:07:36+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.05649102106690407
+    },
+    {
+      "file": "cry-20260421T150919+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:09:19+10:00",
+      "split": "val",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0015746852150186896
+    },
+    {
+      "file": "cry-20260421T151056+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:10:56+10:00",
+      "split": "test",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.03497804328799248
+    },
+    {
+      "file": "cry-20260421T154009+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:40:09+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.006243078503757715
+    },
+    {
+      "file": "cry-20260421T154111+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:41:11+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.0033827777951955795
+    },
+    {
+      "file": "cry-20260421T154426+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T15:44:26+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.02691049315035343
+    },
+    {
+      "file": "cry-20260421T164216+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T16:42:16+10:00",
+      "split": "val",
+      "label_auto": "other",
+      "label_human": "",
+      "yam_cry_max": 0.012423783540725708
+    },
+    {
+      "file": "cry-20260421T174441+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T17:44:41+10:00",
+      "split": "test",
+      "label_auto": "borderline_cry",
+      "label_human": "",
+      "yam_cry_max": 0.4243772029876709
+    },
+    {
+      "file": "cry-20260421T184728+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T18:47:28+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9928677082061768
+    },
+    {
+      "file": "cry-20260421T190220+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T19:02:20+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9913090467453003
+    },
+    {
+      "file": "cry-20260421T190325+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T19:03:25+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9954837560653687
+    },
+    {
+      "file": "cry-20260421T190432+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T19:04:32+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9985190033912659
+    },
+    {
+      "file": "cry-20260421T190550+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T19:05:50+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9971343874931335
+    },
+    {
+      "file": "cry-20260421T190707+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T19:07:07+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9978012442588806
+    },
+    {
+      "file": "cry-20260421T190810+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T19:08:10+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9987289309501648
+    },
+    {
+      "file": "cry-20260421T191037+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T19:10:37+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.8917089700698853
+    },
+    {
+      "file": "cry-20260421T191155+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T19:11:55+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9694603681564331
+    },
+    {
+      "file": "cry-20260421T191403+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T19:14:03+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.96063232421875
+    },
+    {
+      "file": "cry-20260421T201746+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T20:17:46+10:00",
+      "split": "train",
+      "label_auto": "mixed",
+      "label_human": "",
+      "yam_cry_max": 0.05057026445865631
+    },
+    {
+      "file": "cry-20260421T201857+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T20:18:57+10:00",
+      "split": "train",
+      "label_auto": "other",
+      "label_human": "",
+      "yam_cry_max": 0.00033269712002947927
+    },
+    {
+      "file": "cry-20260421T202545+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T20:25:45+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9930049180984497
+    },
+    {
+      "file": "cry-20260421T202846+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T20:28:46+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9890245795249939
+    },
+    {
+      "file": "cry-20260421T223153+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T22:31:53+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9956455230712891
+    },
+    {
+      "file": "cry-20260421T225900+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T22:59:00+10:00",
+      "split": "train",
+      "label_auto": "mixed",
+      "label_human": "",
+      "yam_cry_max": 0.008178707212209702
+    },
+    {
+      "file": "cry-20260421T231041+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T23:10:41+10:00",
+      "split": "train",
+      "label_auto": "speech",
+      "label_human": "",
+      "yam_cry_max": 0.008076488971710205
+    },
+    {
+      "file": "cry-20260421T231623+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T23:16:23+10:00",
+      "split": "train",
+      "label_auto": "mixed",
+      "label_human": "",
+      "yam_cry_max": 0.005840491969138384
+    },
+    {
+      "file": "cry-20260421T233751+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-21T23:37:51+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9361671805381775
+    },
+    {
+      "file": "cry-20260422T013405+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-22T01:34:05+10:00",
+      "split": "test",
+      "label_auto": "other",
+      "label_human": "",
+      "yam_cry_max": 0.006724111270159483
+    },
+    {
+      "file": "cry-20260422T033807+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-22T03:38:07+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9962860941886902
+    },
+    {
+      "file": "cry-20260422T034140+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-22T03:41:40+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9991445541381836
+    },
+    {
+      "file": "cry-20260422T045601+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-22T04:56:01+10:00",
+      "split": "train",
+      "label_auto": "other",
+      "label_human": "",
+      "yam_cry_max": 0.0023843562230467796
+    },
+    {
+      "file": "cry-20260422T072220+1000.wav",
+      "session_id": "night-20260421",
+      "ts_iso": "2026-04-22T07:22:20+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.7103830575942993
+    },
+    {
+      "file": "cry-20260422T183346+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T18:33:46+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9102363586425781
+    },
+    {
+      "file": "cry-20260422T184956+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T18:49:56+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.5646812915802002
+    },
+    {
+      "file": "cry-20260422T185329+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T18:53:29+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9928264617919922
+    },
+    {
+      "file": "cry-20260422T185535+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T18:55:35+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9960148930549622
+    },
+    {
+      "file": "cry-20260422T185648+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T18:56:48+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9922041893005371
+    },
+    {
+      "file": "cry-20260422T185837+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T18:58:37+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9831659197807312
+    },
+    {
+      "file": "cry-20260422T185946+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T18:59:46+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9975351691246033
+    },
+    {
+      "file": "cry-20260422T193810+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T19:38:10+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9931551814079285
+    },
+    {
+      "file": "cry-20260422T194131+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T19:41:31+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9926141500473022
+    },
+    {
+      "file": "cry-20260422T194809+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T19:48:09+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.8947663903236389
+    },
+    {
+      "file": "cry-20260422T195054+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T19:50:54+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9943800568580627
+    },
+    {
+      "file": "cry-20260422T200123+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T20:01:23+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9801985621452332
+    },
+    {
+      "file": "cry-20260422T202429+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T20:24:29+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.7684394121170044
+    },
+    {
+      "file": "cry-20260422T202651+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-22T20:26:51+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9829800724983215
+    },
+    {
+      "file": "cry-20260423T053501+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T05:35:01+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9965356588363647
+    },
+    {
+      "file": "cry-20260423T054642+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T05:46:42+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9833082556724548
+    },
+    {
+      "file": "cry-20260423T055453+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T05:54:53+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9842637777328491
+    },
+    {
+      "file": "cry-20260423T055558+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T05:55:58+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.958223283290863
+    },
+    {
+      "file": "cry-20260423T055701+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T05:57:01+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9869834184646606
+    },
+    {
+      "file": "cry-20260423T055808+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T05:58:08+10:00",
+      "split": "val",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9709047675132751
+    },
+    {
+      "file": "cry-20260423T055842+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T05:58:42+10:00",
+      "split": "test",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9908493161201477
+    },
+    {
+      "file": "cry-20260423T060053+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T06:00:53+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9965548515319824
+    },
+    {
+      "file": "cry-20260423T060157+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T06:01:57+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.9958280920982361
+    },
+    {
+      "file": "cry-20260423T062610+1000.wav",
+      "session_id": "night-20260422",
+      "ts_iso": "2026-04-23T06:26:10+10:00",
+      "split": "train",
+      "label_auto": "cry",
+      "label_human": "",
+      "yam_cry_max": 0.997205376625061
+    }
+  ],
+  "sample_wav_hashes": {
+    "cry-20260418T165723+1000.wav": "8cf3e4f987a588fdfb25c1345dd353bd13971fe472f09e6b93c1cb3273296e45",
+    "cry-20260418T170059+1000.wav": "7cb3984540eb6d6ac5c7560e6b940626513263fad6b144139159381878e7a0e7",
+    "cry-20260418T181217+1000.wav": "0756816360fc9d38b9c3f68342786078841fe674fa9a2612fae42b87c3442ea8",
+    "cry-20260418T181954+1000.wav": "ea73bc3d839813679c81291f61c1391f56f6350fe4653a267cff95abca0bf779",
+    "cry-20260418T190211+1000.wav": "08c94cd2cfa1a9c288ec45e1ff2eaeadd03b700809021b3ce7503bf1976f50e6"
+  }
+}
