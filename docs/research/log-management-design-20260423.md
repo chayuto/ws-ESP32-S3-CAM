@@ -1,6 +1,6 @@
 # Log-management design: end-to-end for cry-detect-01 and beyond
 
-**Status:** draft design, no code changes
+**Status:** accepted; all §11 open questions closed 2026-04-23. Phase 1 migration unblocked.
 **Written:** 2026-04-23
 **Motivated by:** pain points accumulated across 3 overnight sessions
   (20260420, 20260421, 20260422), see §1
@@ -601,40 +601,24 @@ These are **not** in scope now but the design reserves room:
    stripped of PII like caregiver names in meta.json). The `public_ok`
    flag per session controls.
 
-## 11. Open questions (decide before Phase 1)
+## 11. Decisions (all §11 open questions resolved 2026-04-23)
 
-1. **Location of `datasets/` in the repo.** Option A: top of
-   `ws-ESP32-S3-CAM/` (sibling to `projects/`). Option B: inside
-   `projects/cry-detect-01/` (project-local). Leaning A because
-   datasets outlive projects.
-2. **Git-LFS or separate rsync?** At 25 MB/session, a year = ~9 GB of
-   WAVs. git-LFS makes sharing easy but locks us to a specific provider.
-   rsync to external SSD + NAS is cheaper but unversioned. Hybrid: LFS
-   for labels/metadata, rsync for raw WAVs.
-3. **meta.json PII.** Caregiver names, baby age, household — sensitive.
-   Proposal: `meta.json` has a `_public_fields` list; tooling redacts
-   non-public fields when preparing a dataset release.
-4. **SHA-256 for integrity.** Worth the compute on the ESP32? Probably
-   not per-WAV (can't spare the cycles during capture). Host-side hash
-   on ingest is free and sufficient.
-5. **Session-begin authentication.** Currently device is LAN-open. If
-   multi-host ever needs to collaborate, we'd want `/session/*` to be
-   token-guarded. Out of scope now but the HTTP surface should leave
-   room.
-6. **Archive format.** `tar.zst` by default? Evaluate vs zip (portability)
-   vs individual file compression (random access).
-7. **Time zone in filenames.** Session ID `...2026-04-22T19-30` is
-   timezone-less — implicit local. Should it be `T19-30+1000` or UTC?
-   Leaning local+tz-suffix (`T19-30+1000`) — matches log contents and
-   human mental model.
-8. **Close-session on reboot-during-session.** If device reboots 3 times
-   in a session, should that auto-close the session as unstable? Probably
-   keep open (the data is still useful) but add a field
-   `unhealthy_reboots` to meta.json for flagging in downstream analysis.
-9. **Historical back-fill of build_sha.** For existing sessions
-   (20260420..20260422), we can reconstruct per-capture build_sha by
-   cross-referencing CRY-0000.LOG boots against capture timestamps.
-   Worth doing once during Phase 1 migration.
+The table below closes each open question so Phase 1 migration can proceed
+without further blocking discussion. Every decision is overridable in a
+follow-up; default to what's written here unless there's a concrete
+reason to diverge.
+
+| # | question | **decision** | rationale |
+|---:|---|---|---|
+| 1 | `datasets/` location | **Top-level** (`ws-ESP32-S3-CAM/datasets/`) | Datasets outlive the current project and may be shared with future sibling projects (e.g., a published cry-detect benchmark). Already scaffolded there as of commit 99c5892. |
+| 2 | Raw-WAV backup: git-LFS vs rsync | **Hybrid, rsync-first.** Track `labels/*.csv` + `releases/*.json` + session `meta.json` in regular git (text, small). Add `datasets/**/events/*.wav` and `datasets/**/device-logs/*` to `.gitignore`. Nightly `rsync` of the raw tree to an external drive; monthly to a second location. Defer git-LFS until there's an actual sharing need. | No vendor lock-in, no bandwidth cost for casual `git clone`. Text-only git keeps day-to-day workflow fast. |
+| 3 | `meta.json` PII handling | **Default-deny.** `_public_fields` defaults to `["session_id", "device_id", "start_ts", "end_ts", "environment.room", "build.build_sha"]`. Everything else (caregiver, baby age, household, placement detail) is private by default. Dataset-release tooling strips non-public fields when packaging for publication. | Safer failure mode: a forgotten field stays private, not leaks. |
+| 4 | SHA-256 integrity | **Host-side only.** Firmware does not hash during capture. Host computes SHA-256 on ingest, stores in `meta.json.extract_ok.file_hashes[]`. Detect drift by re-hashing on archive/unarchive. | ESP32 can't spare cycles per capture without risking WAV write underruns. Host hash catches all the drift modes we care about. |
+| 5 | Session-begin authentication | **None for now.** Reserve an `X-Cry-Session-Token` header in the HTTP spec for future use. Document in firmware that endpoints are LAN-trust. Revisit when there's a second host or a reason to share. | Current deployment is single-home, single-host. Auth adds complexity with no current threat model. |
+| 6 | Archive format | **`tar.zst`** (zstd level 3). Single-file tarballs per closed session, streamable. Extracted files are normal WAV/JSONL with no special tooling. | ~5× compression on our data, random access via tar, zstd is fast and ubiquitous. |
+| 7 | Time zone in filenames | **Local + tz suffix** — `cry-detect-01-2026-04-22T19-30+1000`. Matches existing WAV filename convention `cry-YYYYMMDDTHHMMSS+TZ.wav`. | Human-readable in the same TZ as the physical environment. TZ suffix disambiguates unambiguously. |
+| 8 | Reboot-during-session handling | **Keep session open by default.** meta.json gains `unhealthy_reboots` (count of reboots with prev_uptime < 60 s). Auto-close if >5 reboots in a rolling 1 h window (runaway crash guard). | Data across reboots is still valuable. The watchdog catches crash loops. |
+| 9 | Build_sha back-fill | **Yes, one-shot** during Phase 1 migration. `tools/migrate_session_to_dataset.py` opens `CRY-0000.LOG`, extracts each boot's `build_sha` from the wifi_up row (the `0.718`-style watched-class values fingerprint old vs new firmware), and stamps per-capture `build_sha` on triggers.jsonl entries by timestamp match. | Enables cross-session joins immediately; cheap one-shot compute. |
 
 ## 12. Success criteria
 
