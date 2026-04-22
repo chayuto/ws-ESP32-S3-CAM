@@ -190,8 +190,11 @@ extern "C" esp_err_t yamnet_run(const int8_t *patch_96x64, yamnet_result_t *resu
     }
 
     int8_t raw = g_output->data.int8[YAMNET_BABY_CRY_CLASS_INDEX];
-    float logit = g_output_scale * (float)(raw - g_output_zero_point);
-    float conf = 1.0f / (1.0f + expf(-logit));
+    /* The Keras YAMNet graph applies classifier_activation='sigmoid' before
+     * the int8 output tensor — dequantised value IS the probability in [0,1].
+     * Earlier code added a second sigmoid and clipped every confident class
+     * to sigmoid(0.996) = 0.7303. Use dequant directly. */
+    float conf = g_output_scale * (float)(raw - g_output_zero_point);
 
     result->cry_raw_int8 = raw;
     result->cry_conf = conf;
@@ -214,7 +217,8 @@ extern "C" void yamnet_get_confidences(float *out, int max_classes)
     if (max_classes < n) n = max_classes;
     for (int i = 0; i < n; ++i) {
         int8_t raw = g_output->data.int8[i];
-        float logit = g_output_scale * (float)(raw - g_output_zero_point);
-        out[i] = 1.0f / (1.0f + expf(-logit));
+        /* Dequantised output is already a sigmoid-activated probability;
+         * the earlier extra sigmoid here was the source of the 0.7303 cap. */
+        out[i] = g_output_scale * (float)(raw - g_output_zero_point);
     }
 }
