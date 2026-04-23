@@ -138,20 +138,28 @@ static void compute_one_frame(const float *samples, float *log_mel_out)
     dsps_bit_rev_fc32(s_fft_work, MEL_FFT_SIZE);
     dsps_cplx2reC_fc32(s_fft_work, MEL_FFT_SIZE);
 
-    float power[FFT_BINS];
+    /* YAMNet reference uses magnitude (|X|), not power (|X|²).
+     * Feeding power to the mel filterbank produces a wholly different
+     * distribution from what the INT8 PTQ was calibrated on — the model
+     * then collapses to its near-zero baseline (int8 code ≈ 0.066 post-
+     * dequant). See docs/research/deep-analysis-20260423.md §Q1. */
+    float magnitude[FFT_BINS];
     for (int k = 0; k < FFT_BINS; ++k) {
         float re = s_fft_work[2 * k];
         float im = s_fft_work[2 * k + 1];
-        power[k] = re * re + im * im;
+        magnitude[k] = sqrtf(re * re + im * im);
     }
 
     float mel_energy[MEL_BANDS] = {0};
     const mel_entry_t *t = s_mel_triplets;
     for (uint32_t i = 0; i < s_mel_entries; ++i) {
-        mel_energy[t[i].mel_band] += t[i].weight * power[t[i].fft_bin];
+        mel_energy[t[i].mel_band] += t[i].weight * magnitude[t[i].fft_bin];
     }
+    /* YAMNet log_offset=0.001; 1e-10 sent silent bins to ~-23 (out of
+     * distribution). 0.001 floors them at ~-6.9, matching the training
+     * distribution. */
     for (int m = 0; m < MEL_BANDS; ++m) {
-        log_mel_out[m] = logf(mel_energy[m] + 1e-10f);
+        log_mel_out[m] = logf(mel_energy[m] + 0.001f);
     }
 }
 
