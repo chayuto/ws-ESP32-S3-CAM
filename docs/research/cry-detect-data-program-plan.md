@@ -43,39 +43,88 @@ These are preconditions. Nothing else in the plan matters if data is being lost 
 - **Problem:** `extract_session.sh` skipped `triggers.jsonl` if already present locally, missing appended entries between extracts. Identified + patched during the 04-20 session.
 - **Status:** patch is staged uncommitted; commit tonight so tomorrow's extract is reproducible.
 
-## 2. Tier 2 — annotation workflow
+## 2. Tier 2 — auto-ensemble labelling (no human in the loop)
 
-For the dataset to be useful, every WAV needs a label that's stable across time.
+**Decision (2026-04-25):** human review is removed from the label-
+production path. Manual annotation does not scale (single-annotator
+bottleneck on 100+ captures/night) and contradicts the data-flywheel
+ethos. Labels are produced by an automated multi-oracle ensemble
+whose inter-oracle agreement gives us per-capture confidence tiers.
 
-### 2.1 Label schema (v1)
+### 2.1 The four oracles
 
-Per-WAV labels should be:
+Each capture is scored by four independent signals:
 
-| field | values | who |
-|---|---|---|
-| `yam_label` | `baby_cry`, `crying_sobbing`, `speech`, `other`, `silence`, `multi` | auto (YAMNet ≥ 0.5) |
-| `yam_conf` | 0.0 – 1.0 | auto |
-| `human_label` | `cry`, `fuss`, `distress`, `not_cry`, `borderline`, `unsure` | human review |
-| `environment` | `bedroom`, `living-room`, `car`, `outdoor`, `other` | auto (session metadata) |
-| `context` | free-text — "pre-feed", "wake-up", "post-bath", etc. | human, optional |
-| `audit_ts` | ISO timestamp | auto at audit time |
+1. **YAMNet wide-class (FP32, primary)** — already in
+   `yamnet_files.csv` per session. We use:
+   - `yam_cry_score` = max across {baby_cry, crying_sobbing, whimper,
+     wail_moan, screaming}
+   - `yam_speech_score` = max across {speech, child_speech, babbling,
+     baby_laughter, giggle} (separate column, NOT subtracted from
+     `yam_cry_score`; mixed audio with caregiver speech is still a
+     valid cry).
+2. **Acoustic-feature classifier (sklearn LogReg)** — trained at audit
+   time on pooled high-confidence captures (yam ≥ 0.5 ⇒ cry, < 0.1 ⇒
+   FP). Features: HNR, flatness, voiced_frac, b_250_500, b_1k_2k,
+   centroid, rolloff85, active_frac, onsets, zcr. Cross-session AUC
+   ≈ 0.97 per `deep-analysis-20260423.md` §Q2. Output: `feat_clf_prob`
+   ∈ [0,1].
+3. **Sub-type cluster (k=4 KMeans)** — descriptive, not predictive.
+   Fit on `yam_cry_score ≥ 0.5` subset. Centroids are labelled by f0
+   ordering: `fuss`, `full_cry`, `distress`, `screech`. Membership
+   reveals novel modes (the screech sub-type per `deep-analysis-
+   20260423.md` §Q3).
+4. **Temporal context** — count of YAM-≥-0.5 captures within ±5 min,
+   excluding self. Real cries cluster; isolated high-confidence
+   captures are slightly less reliable.
 
-`yam_label` and `human_label` disagreements are the interesting set — those become the training-refinement candidates.
+### 2.2 The combiner: confidence tiers
 
-### 2.2 Bulk auto-label pass
-- Input: `yamnet_files.csv` per session.
-- Rule: if max `baby_cry` or `crying_sobbing` ≥ 0.5 → `yam_label = baby_cry`; if `speech` ≥ 0.5 → `speech`; etc.
-- Output: `labels.csv` per session, one row per WAV, everything resolved except `human_label`.
-- Cost: near-zero, already part of audit pipeline.
+```
+oracle_agreement = |yam_cry_score - feat_clf_prob|
+consensus_score  = mean(yam_cry_score, feat_clf_prob)
 
-### 2.3 Human audit tool (to build)
-- Web UI or terminal: show spectrogram PNG + 5 s audio clip + current auto-label, take a single keypress (`c` cry, `f` fuss, `d` distress, `n` not-cry, `b` borderline, `?` skip).
-- Stores to `labels.csv` directly, resumable.
-- Goal: ~5 s per WAV review ⇒ 10 min/night human time for a 100-WAV session.
-- Not blocking for tonight; build before the 3rd session.
+tier =
+  high_pos    if agreement < 0.2 AND consensus >= 0.7
+  high_neg    if agreement < 0.2 AND consensus <= 0.1
+  medium_pos  if consensus >= 0.4
+  medium_neg  if agreement < 0.3 AND consensus < 0.4
+  low         otherwise (oracles disagree)
+```
 
-### 2.4 Borderline review cadence
-- Weekly: re-review the "borderline" and "disagreement" sets. These are where model improvement comes from.
+**Training subset = high_pos ∪ high_neg.** Medium/low captures stay
+in the dataset for evaluation, uncertainty study, and surfacing
+oracle blind spots.
+
+### 2.3 Human notes as supplementary signal (never authoritative)
+
+The existing `triggers.jsonl[].note` field is parsed at audit time
+into one of {`cry`, `not_cry`, `test`, `auto`, `""`}. The result is
+stored in `human_note_label` plus a boolean `human_note_agrees` that
+records whether the (rare) human-input label matched the ensemble
+verdict. **The ensemble verdict is the canonical label regardless.**
+
+Why supplementary: humans are noisy. In the 04-25 audit, of 11
+human-asserted cry/not-cry labels, 1 mismatched the ensemble — a
+test recording filename'd "Cry1" that both YAMNet and the feature
+classifier unanimously flagged as not-cry. Trusting the human there
+would have poisoned the dataset.
+
+### 2.4 No review cadence — automated re-audit instead
+
+There is no weekly human-review meeting. Instead, `tools/ensemble_audit.py`
+is rerun whenever:
+- A new session is extracted (adds new captures + retrains feat_clf
+  with more data).
+- An oracle is upgraded (e.g., we add PANNs as a 3rd model).
+- A schema is bumped.
+
+Each run produces a fresh `master.csv`. Past dataset releases stay
+frozen; new releases pick up the new audit.
+
+The only human-in-loop signal is the `low`-tier disagreement count
+per session: a sudden spike means our oracles started misaligning,
+which we'd want to look at. That's monitoring, not labelling.
 
 ## 3. Tier 3 — retention and rotation
 

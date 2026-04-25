@@ -241,11 +241,10 @@ ws-ESP32-S3-CAM/
               specgrams/
             audit-v2/                      # re-audit with improved pipeline
               ...
-          labels/                          # per-session human/auto labels
-            auto-yamnet.csv                # from audit
-            human.csv                      # from annotation tool
-            merged.csv                     # combined view
-          README.md                        # human notes (env, incidents, etc.)
+          labels/                          # per-session ensemble labels
+            ensemble.csv                   # full per-capture score vector
+                                           # (no human review — see plan §2)
+          README.md                        # session metadata (env, incidents)
 
       archive/                             # old sessions, compressed
         cry-detect-01-2026-01-15T19-30.tar.zst
@@ -394,17 +393,27 @@ Fields that the current CRY-0000.LOG lacks:
 
 ### 6.6 `labels/master.csv` (per-device, cross-session)
 
-```csv
-session_id,capture_file,ts_local,env,yam_cry,yam_speech,yam_scream,
-  human_label,human_notes,human_annotator,audit_version,audit_ts,
-  build_sha_capture,build_sha_audit,hnr_db,f0_mean_hz,...
-cry-detect-01-2026-04-22T19-30,cry-20260422T185332+1000.wav,2026-04-22 18:53:32,bedroom,
-  0.429,0.010,0.002,cry,"bedtime peak cry",chayut,audit-v1,2026-04-23T08:20,
-  4af50c57,audit-v1,9.4,521,...
-```
+Schema v2 (post 2026-04-25 redesign — see `data-vault-redesign-20260425.md`).
+Produced by `tools/ensemble_audit.py`, no human in label loop.
+
+Per-capture columns:
+
+| group | columns |
+|---|---|
+| identity | `session_id`, `capture_file`, `ts_iso` |
+| YAMNet | `yam_baby_cry`, `yam_crying_sobbing`, `yam_speech`, `yam_child_speech`, `yam_screaming`, `yam_cry_pos_max`, `yam_cry_neg_max`, `yam_cry_score`, `yam_speech_score`, `yam_cry_purity` |
+| feature classifier | `feat_clf_prob` |
+| sub-type cluster | `cluster_id`, `cluster_label` (one of fuss/full_cry/distress/screech, only set if yam_cry_score ≥ 0.5) |
+| temporal | `temporal_neighbors_5min`, `temporal_high_conf_neighbors_5min` |
+| combiner | `oracle_agreement`, `consensus_score`, `confidence_tier` (high_pos / high_neg / medium_pos / medium_neg / low) |
+| raw features | `hnr_db`, `f0_mean_hz`, `f0_voiced_frac`, `rms_peak`, `duration_s`, `centroid_mean_hz`, `flatness_mean` |
+| device-side | `trigger_note`, `trigger_rms`, `dev_cry_conf_at_capture` |
+| supplementary human | `human_note_label`, `human_note_text`, `human_note_agrees` (NEVER overrides ensemble — monitor only) |
+| provenance | `yamnet_oracle_version`, `ensemble_version`, `audited_at` |
 
 One row per capture ever. Columns evolve (additive). Dataset releases
-pin which columns and which rows by session_id filter.
+pin per-capture score vectors via `releases/<id>.json` so a frozen
+release survives a future master.csv schema change.
 
 ### 6.7 Schema evolution policy
 

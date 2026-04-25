@@ -1,26 +1,33 @@
 #!/usr/bin/env python3
-"""Freeze a dataset release from the current master label ledger.
+"""Freeze a dataset release from the current ensemble label ledger.
 
-Produces a JSON manifest that pins:
-  - Exact set of WAV filenames included
-  - Their labels at this moment (with hash for integrity)
-  - Build / tooling versions used to produce the derived features
-  - Split assignments (train / val / test-holdout)
+Schema v2 (2026-04-25): replaces single categorical label with the
+full ensemble vector. Releases pin every score so a future training
+run can reproduce a slice without depending on the current state of
+master.csv.
 
-Future training runs reference `release_id` in their config. If the
-master.csv evolves, the old release still points at the same WAV list
-and label snapshot.
+What's in a release:
+  - Exact set of WAV filenames + per-capture label vector at this moment
+  - Splits (train / val / test, deterministic by filename sort)
+  - Provenance: git_head_sha, ensemble_version, yamnet_oracle_version,
+    feat_clf retrain timestamp (== audited_at)
+  - Aggregate stats (tier histogram, cluster histogram, human-note
+    agreement counts) for sanity check
 
 Usage:  tools/freeze_release.py <release_id>
-   e.g. tools/freeze_release.py cry-v0.0-exploratory
+   e.g. tools/freeze_release.py cry-v0.1-ensemble
 """
 import csv, hashlib, json, os, subprocess, sys
+from collections import Counter, defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 DATASET = REPO / "datasets" / "cry-detect-01"
 MASTER = DATASET / "labels" / "master.csv"
+
+RELEASE_SCHEMA_VERSION = "v2"
+
 
 def git_head_sha(short=True):
     try:
@@ -31,6 +38,7 @@ def git_head_sha(short=True):
     except Exception:
         return "unknown"
 
+
 def sha256_file(path, chunk=1 << 20):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -38,88 +46,121 @@ def sha256_file(path, chunk=1 << 20):
             h.update(b)
     return h.hexdigest()
 
+
+def split_for(i):
+    """Deterministic train/val/test by row index."""
+    if i % 5 == 4: return "test"
+    if i % 5 == 3: return "val"
+    return "train"
+
+
+def f(s):
+    try: return float(s) if s else None
+    except Exception: return None
+
+
 def main(release_id):
     if not MASTER.exists():
-        print(f"master labels missing at {MASTER}; run build_master_labels.py first", file=sys.stderr)
+        print(f"master labels missing at {MASTER}; run ensemble_audit.py first", file=sys.stderr)
         return 1
     rows = list(csv.DictReader(open(MASTER)))
-
-    # Simple heuristic splits: reserve every 5th WAV (by sort order) as test-holdout
-    # Train/val split: 80/20 among the rest. Deterministic by filename sort.
     rows.sort(key=lambda r: r["capture_file"])
-    split = {}
-    for i, r in enumerate(rows):
-        if i % 5 == 4:
-            split[r["capture_file"]] = "test"
-        elif i % 5 == 3:
-            split[r["capture_file"]] = "val"
-        else:
-            split[r["capture_file"]] = "train"
 
-    # Compute content hashes for WAVs — guards against accidental mutation
+    # Sample a few WAV hashes for drift detection
     logs = REPO / "projects" / "cry-detect-01" / "logs"
     wav_hashes = {}
-    hash_sampled = 0
-    for r in rows:
-        # Check the most-recent session first since it's cumulative
-        candidates = [
-            logs / "night-20260422" / "wavs" / r["capture_file"],
-            logs / r["session_id"] / "wavs" / r["capture_file"],
-        ]
-        wav_path = next((c for c in candidates if c.exists()), None)
-        if wav_path and hash_sampled < 5:  # hash first 5 for size check
-            wav_hashes[r["capture_file"]] = sha256_file(wav_path)
-            hash_sampled += 1
+    for r in rows[:5]:
+        for sess in (r["session_id"], "night-20260424", "night-20260422", "night-20260421", "night-20260420"):
+            wp = logs / sess / "wavs" / r["capture_file"]
+            if wp.exists():
+                wav_hashes[r["capture_file"]] = sha256_file(wp)
+                break
 
-    # Summary counts
-    from collections import Counter
-    split_counts = Counter(split.values())
-    label_counts = Counter(r["yam_label_auto"] for r in rows)
+    # Aggregates for the release manifest header
+    splits = Counter()
+    tiers = Counter(); clusters = Counter()
+    human_label_counts = Counter(); human_agree_counts = Counter()
+    for i, r in enumerate(rows):
+        splits[split_for(i)] += 1
+        tiers[r["confidence_tier"]] += 1
+        if r.get("cluster_label"): clusters[r["cluster_label"]] += 1
+        if r.get("human_note_label"): human_label_counts[r["human_note_label"]] += 1
+        if r.get("human_note_agrees"): human_agree_counts[r["human_note_agrees"]] += 1
+
+    # Per-capture record (slim) — pins the score vector and split
+    captures = []
+    for i, r in enumerate(rows):
+        captures.append({
+            "file": r["capture_file"],
+            "session_id": r["session_id"],
+            "ts_iso": r["ts_iso"],
+            "split": split_for(i),
+            # Ensemble label vector (authoritative)
+            "yam_cry_score": f(r["yam_cry_score"]),
+            "yam_speech_score": f(r["yam_speech_score"]),
+            "yam_cry_purity": f(r["yam_cry_purity"]),
+            "feat_clf_prob": f(r["feat_clf_prob"]),
+            "consensus_score": f(r["consensus_score"]),
+            "oracle_agreement": f(r["oracle_agreement"]),
+            "confidence_tier": r["confidence_tier"],
+            "cluster_label": r["cluster_label"] or None,
+            "temporal_high_conf_neighbors_5min": int(r["temporal_high_conf_neighbors_5min"] or 0),
+            # Human note (supplementary)
+            "human_note_label": r["human_note_label"] or None,
+            "human_note_agrees": r["human_note_agrees"] or None,
+        })
+
+    # Recommended training subset: high_pos OR high_neg only (oracles agree
+    # strongly). Rest stay in dataset for evaluation/inspection.
+    train_eligible = sum(1 for c in captures if c["confidence_tier"] in ("high_pos", "high_neg"))
+
+    audited_at = rows[0].get("audited_at") if rows else ""
+    ensemble_version = rows[0].get("ensemble_version") if rows else ""
+    yamnet_oracle_version = rows[0].get("yamnet_oracle_version") if rows else ""
 
     release = {
-        "_schema": {"version": "v1", "type": "dataset_release"},
+        "_schema": {"version": RELEASE_SCHEMA_VERSION, "type": "dataset_release"},
         "release_id": release_id,
         "frozen_at": datetime.now(timezone(timedelta(hours=10))).isoformat(),
         "git_head_sha": git_head_sha(),
         "device_id": "cry-detect-01",
         "n_captures": len(rows),
         "sessions": sorted(set(r["session_id"] for r in rows)),
-        "splits": dict(split_counts),
-        "label_distribution_auto": dict(label_counts),
-        "label_source": "yamnet_auto_only_no_human",
-        "notes": (
-            "v0.0-exploratory — first frozen snapshot. Labels are YAMNet-only "
-            "(no human review yet). Intended for tooling dry-runs and dataset "
-            "infrastructure bring-up, NOT for model training. The sessions "
-            "span firmware builds a895bfdc, a4870a21, 4af50c57 — any model "
-            "training on this release should filter on build_sha or avoid "
-            "using dev-side cry_conf as a feature."
+        "splits": dict(splits),
+        "confidence_tier_distribution": dict(tiers),
+        "cluster_distribution": dict(clusters),
+        "human_note_label_distribution": dict(human_label_counts),
+        "human_note_agreement_distribution": dict(human_agree_counts),
+        "train_eligible_n": train_eligible,
+        "label_source": "auto_ensemble_no_human_in_label_loop",
+        "ensemble": {
+            "version": ensemble_version,
+            "yamnet_oracle_version": yamnet_oracle_version,
+            "feat_clf": "sklearn LogisticRegression on 10 acoustic features, retrained at audit time",
+            "subtype_cluster": "k=4 KMeans on F0/HNR/band features, fit on yam_cry_score>=0.5",
+            "temporal_window_s": 300,
+            "audited_at": audited_at,
+        },
+        "training_recommendation": (
+            "Use captures with confidence_tier in {high_pos, high_neg} for "
+            "model training (oracles agree). medium_* and low captures stay "
+            "in the dataset for evaluation, uncertainty study, and oracle-"
+            "disagreement investigation. human_note fields are SUPPLEMENTARY "
+            "monitoring data — never override the ensemble verdict."
         ),
-        "captures": [
-            {
-                "file": r["capture_file"],
-                "session_id": r["session_id"],
-                "ts_iso": r["ts_iso"],
-                "split": split[r["capture_file"]],
-                "label_auto": r["yam_label_auto"],
-                "label_human": r.get("human_label", ""),
-                "yam_cry_max": max(
-                    float(r.get("yam_baby_cry") or 0),
-                    float(r.get("yam_crying_sobbing") or 0),
-                ),
-            }
-            for r in rows
-        ],
-        "sample_wav_hashes": wav_hashes,  # spot-check for drift detection
+        "captures": captures,
+        "sample_wav_hashes": wav_hashes,
     }
 
     out_path = DATASET / "releases" / f"{release_id}.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w") as f:
-        json.dump(release, f, indent=2, default=str)
+    with open(out_path, "w") as f_:
+        json.dump(release, f_, indent=2, default=str)
     print(f"wrote {out_path}")
-    print(f"  {len(rows)} captures, splits: {dict(split_counts)}")
-    print(f"  label distribution: {dict(label_counts)}")
+    print(f"  {len(rows)} captures   splits={dict(splits)}")
+    print(f"  tiers={dict(tiers)}")
+    print(f"  train_eligible (high_pos+high_neg) = {train_eligible}")
+
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else "cry-v0.0-exploratory"))
+    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else "cry-v0.1-ensemble"))
