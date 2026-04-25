@@ -41,3 +41,16 @@ projects/*/tools/.yamnet_work/
 
 # Personal drafts, negotiation notes, anything not for publication
 docs/private/
+
+# ML researcher's lab notebooks — gitignored like raw data.
+# Conventions in `.claude/commands/ml-researcher.md` §Workflow.
+# Only the experiments-dir conventions README is in git;
+# everything inside experiment subdirs (notebooks, intermediate
+# models, plots) stays local.
+projects/cry-detect-01/ml-experiments/*
+!projects/cry-detect-01/ml-experiments/README.md
+!projects/cry-detect-01/ml-experiments/.gitkeep
+
+# Raw session data (WAVs, device-logs, derived audit artifacts).
+# Backed up via tools/backup-data.sh into ~/Backups/ws-ESP32-S3-CAM/.
+projects/cry-detect-01/logs/
