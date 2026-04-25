@@ -56,8 +56,12 @@ docs/research/data-reassessment-*.md
 
 # Auto-generated label table + release snapshots — both expose per-capture
 # wallclock timestamps from real recordings. Backed up via tools/backup-data.sh.
+# INVENTORY.md + dataset README also leak per-day capture counts.
 datasets/cry-detect-01/labels/master.csv
 datasets/cry-detect-01/releases/
+datasets/cry-detect-01/INVENTORY.md
+datasets/cry-detect-01/README.md
+projects/cry-detect-01/hf/README.md
 
 # Trained model artifacts derived from private audio (sklearn pickles, etc).
 # yamnet.tflite is already covered by the projects/*/hf/*.tflite rule above.
