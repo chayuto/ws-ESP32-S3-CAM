@@ -1,10 +1,31 @@
 # cry-detect-01
 
-Stage-1 pretrained baby-cry detector on the Waveshare ESP32-S3-CAM-GC2145.
+Pretrained baby-cry detector on the Waveshare ESP32-S3-CAM-GC2145, with
+host-side data-labelling tooling for an end-to-end no-human-in-the-loop
+training pipeline.
 
-Pipeline: ES7210 mic → I²S DMA (16 kHz mono) → log-mel patch (96×64) → **YAMNet-1024 INT8** (TFLite Micro) → threshold on class-20 (*Baby cry, infant cry*) → red LED + SD log + web UI over Wi-Fi.
+**On-device:** ES7210 mic → I²S DMA (16 kHz mono) → log-mel patch
+(96×64) → **YAMNet-1024 INT8** (TFLite Micro) → threshold on class-20
+(*Baby cry, infant cry*) → red LED + SD log + auto-recorded WAV +
+web UI over Wi-Fi. No training, no fine-tuning, no vision, no AFE.
 
-No training. No fine-tuning. No vision. No AFE. See `docs/internal/cry-detect-01-plan.md` for the full plan and `docs/research/cry-detect-starter-plan.md` for the decisions behind it.
+**Host-side:** captured WAVs flow into a 4-oracle auto-ensemble
+(YAMNet wide-class FP32 + sklearn `feat_clf` + sklearn `embed_clf` on
+2048-d meanmax embeddings + sub-type cluster + temporal context) that
+produces per-capture confidence tiers. No human in the label loop —
+the `low` tier is the research bucket where oracles disagree.
+
+Method documented in
+[`docs/research/host-side-auto-ensemble-method.md`](../../docs/research/host-side-auto-ensemble-method.md).
+Decisions behind the on-device choices in
+[`docs/research/cry-detect-starter-plan.md`](../../docs/research/cry-detect-starter-plan.md).
+ML work follows the `/ml-researcher` discipline (pre-register, ablate,
+gitignore the lab notebook, commit only durable conclusions) — see
+[`.claude/commands/ml-researcher.md`](../../.claude/commands/ml-researcher.md).
+
+**Privacy:** captures, derived labels, trained classifier weights, and
+session-narrative analyses are all gitignored — see "Publish boundary"
+in the repo-root `CLAUDE.md`.
 
 ## Prerequisites
 
@@ -96,8 +117,8 @@ All in `idf.py -C . -B build menuconfig` → "Cry-detect-01":
 
 | Symbol | Default | Tune if... |
 |---|---|---|
-| `CRY_DETECT_THRESHOLD` | 40 | Lower for more sensitivity; raise to suppress TV/pet false alarms |
-| `CRY_DETECT_CONSEC_FRAMES` | 3 | Raise for more stability; lower for faster response |
+| `CRY_DETECT_THRESHOLD` | 40 | Raw INT8 threshold (range -128..127). 40 ≈ 0.31 after dequantisation. Lower for sensitivity; raise to suppress TV/pet false alarms |
+| `CRY_DETECT_CONSEC_FRAMES` | 6 | Raise for more stability; lower for faster response. With ~1.4 inferences/s, 6 ≈ 4.3 s of sustained evidence |
 | `CRY_DETECT_MIC_GAIN_DB` | 36 | Check `/metrics.input_rms`; raise if flat, lower if clipping |
 | `CRY_DETECT_HOLD_MS` | 5000 | Alert latch duration |
 
@@ -110,9 +131,48 @@ yamnet       4 MB   SPIFFS, yamnet.tflite (~3 MB)
 logs_fat     1 MB   FAT, SD-absent log fallback
 ```
 
-## Files
+## Module layout
 
-See `docs/internal/cry-detect-01-plan.md` §2 for module layout and §10 for boot sequence.
+| File | Role |
+|---|---|
+| `main/main.c` | Boot sequence, task setup, BSP init |
+| `main/audio_capture.{c,h}` | I²S DMA from ES7210, ring buffer |
+| `main/mel_features.{c,h}` | Hanning + 512-pt FFT → 96×64 log-mel patch (magnitude spectrum) |
+| `main/yamnet.{cc,h}` | TFLite Micro inference, INT8 quantization |
+| `main/detector.{c,h}` | Threshold + consecutive-frame hysteresis |
+| `main/event_recorder.{c,h}` | Pre-roll + post-roll WAV recording on detect |
+| `main/auto_trigger.{c,h}` | RMS-vs-noise-floor fallback trigger for data collection |
+| `main/noise_floor.{c,h}` | Adaptive ambient-noise tracking |
+| `main/sd_logger.{c,h}` | Rotating CSV log on SD card |
+| `main/metrics.{c,h}`, `metrics_logger.{c,h}` | `/metrics` JSON + 1 Hz JSONL inference log |
+| `main/file_api.{c,h}` | Stage 2.7 remote file endpoints |
+| `main/web_ui.{c,h}` | SSE + dashboard |
+| `main/network.{c,h}` | Wi-Fi STA + SNTP + timezone |
+| `main/log_retention.{c,h}` | Day-bucketed log GC |
+| `main/breadcrumb.{c,h}` | NVS state markers across reboots |
+| `main/led_alert.{c,h}` | CH32V003 P6 red LED, software PWM dim |
+
+## Host-side tooling
+
+Under `tools/` — used to turn captured WAVs into auto-labelled training
+material. Method documented in
+[`docs/research/host-side-auto-ensemble-method.md`](../../docs/research/host-side-auto-ensemble-method.md).
+
+| Tool | Purpose |
+|---|---|
+| `ensemble_audit.py` | Run all oracles over the capture pool, write `master.csv` with per-capture scores + tier (gitignored output) |
+| `freeze_release.py <id>` | Snapshot the current `master.csv` into a versioned release JSON with frozen splits |
+| `build_inventory.py` | Auto-generate `INVENTORY.md` (date range, tier counts, by-day breakdown) |
+| `extract_session.sh` | Pull a session's WAVs + JSONL infer log + triggers via the `/files` API |
+| `audit_pipeline.sh` | Numeric features + YAMNet FP32 oracle on a WAV directory |
+| `score_yamnet.py` | YAMNet FP32 inference on raw WAVs (host-side oracle) |
+| `cry_monitor.sh` | Long-running heartbeat monitor with anomaly streaming |
+| `repTQ_yamnet.py` | INT8 PTQ harness — recalibration with real audio (currently a documented negative result; keeps the synthetic-noise calibrated tflite shipped) |
+
+ML experiments live under `ml-experiments/<YYYY-MM-DD-topic>/` (the
+directory is gitignored — only the conventions README is committed).
+Each experiment carries a `config.json` model-version stamp. See the
+`/ml-researcher` slash command for the canonical workflow.
 
 ## Troubleshooting
 

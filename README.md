@@ -4,22 +4,27 @@ Workspace for the **Waveshare ESP32-S3-CAM-GC2145** (SKU 33702, P/N `ESP32-S3-CA
 
 Full context, pinout, and vendor quirks live in [`CLAUDE.md`](./CLAUDE.md).
 
+## Repo philosophy
+
+This repo publishes **firmware + tooling only** — recordings, derived
+labels, trained classifier weights, and analyses that narrate real
+captures stay local. The `datasets/` tree, lab notebooks under
+`projects/*/ml-experiments/`, and date-stamped narrative docs are
+gitignored. See `CLAUDE.md` "Publish boundary" for the full list.
+
 ## Repo layout
 
 ```
 ws-ESP32-S3-CAM/
-├── CLAUDE.md                 # authoritative board notes + build rules
+├── CLAUDE.md                 # authoritative board notes + publish boundary
 ├── README.md                 # this file
 ├── .claude/
-│   └── commands/             # /build /flash /monitor /restore-factory /hardware-specs /peripherals
+│   └── commands/             # /build /flash /monitor /ml-researcher /restore-factory ...
 ├── docs/
-│   ├── internal/             # plans for active projects
-│   └── research/             # ML/hardware/robustness deep-dives (checked in)
+│   ├── blog/                 # public-facing writeups
+│   └── research/             # public-info-sourced surveys, design + method docs
 ├── projects/
-│   └── cry-detect-01/        # Stage-1 pretrained YAMNet baby-cry detector
-├── logs/
-│   ├── cry-detect-01-export-<UTC-TS>/   # device log exports via /files API
-│   └── deploy-01-final/      # pre-reflash snapshots
+│   └── cry-detect-01/        # YAMNet-on-S3 baby-cry detector + auto-ensemble tooling
 └── ref/                      # vendor docs + repos (gitignored, ~1.2 GB)
     ├── datasheets/           # ESP32-S3, GC2145, ES8311, ES7210
     ├── schematic/            # ESP32-S3-CAM schematic
@@ -30,32 +35,47 @@ ws-ESP32-S3-CAM/
 ## Active projects
 
 ### [`projects/cry-detect-01`](./projects/cry-detect-01/README.md)
-Discreet bedroom baby-cry monitor. **No camera, no screen** — ES7210 mic → YAMNet-1024 INT8 (TFLite Micro) → SD-card CSV + SSE web UI + red-LED alert.
+Discreet bedroom baby-cry monitor. **No camera, no screen** — ES7210 mic → YAMNet-1024 INT8 (TFLite Micro) → SD-card CSV + SSE web UI + red-LED alert. Host-side data tools turn the resulting captures into auto-labelled training material via a 4-oracle ensemble (no human in the label loop).
 
-**Status (2026-04-17):**
-- Stage 1 flashed and running at `cry-detect-01.local` / `192.168.1.100`
-- Runtime robustness hardened (stack canaries, heap poisoning, WDT, null-guarded mutexes)
-- Night-mode LED brightness control
-- **Stage 2.7 file API live**: remote `/files/ls`, `/files/get`, `/files/tail`, `/files/df` etc. — pull logs without pulling the SD card
-- Local timezone: Sydney AEST/AEDT. Timestamps RFC-3339 with numeric offset (`2026-04-18T08:13:53.726+10:00`)
-- **Known blocker**: synthetic-waveform INT8 PTQ compressed all 521 YAMNet outputs into 0.56-0.64 band; real events are detected by mic+RMS (confirmed in `logs/.../ANALYSIS.md`) but not separable in model output. Stage 2.1 real-audio recalibration is the critical path.
-
-See [`docs/internal/cry-detect-01-plan.md`](./docs/internal/cry-detect-01-plan.md) for the stage roadmap.
+**Status (2026-04-25):**
+- Detector firing on real cries. After two firmware fixes —
+  *double-sigmoid removal* in the YAMNet output path and a
+  *mel-feature magnitude-vs-power correction* — the on-device
+  `cry_conf` reaches 0.934 on real cries (matching FP32 YAMNet)
+  versus 0.000 on silence. First `ALERT_FIRED` events (n=6 in one
+  night) landed under the fixed firmware.
+- Stage 2.7 file API live: remote `/files/ls`, `/files/get`,
+  `/files/tail`, `/files/df` — pull logs without pulling the SD card.
+- Local timezone: Sydney AEST/AEDT. Timestamps RFC-3339 with numeric
+  offset (e.g. `2026-04-18T08:13:53.726+10:00`).
+- Host-side **auto-ensemble** label pipeline (`tools/ensemble_audit.py`)
+  merges YAMNet wide-class scores, an acoustic-feature classifier, an
+  embedding classifier on YAMNet's 2048-d meanmax, a sub-type cluster,
+  and temporal context into per-capture confidence tiers. Method
+  documented in `docs/research/host-side-auto-ensemble-method.md`.
+- ML work follows the `/ml-researcher` discipline: pre-register
+  hypothesis, stamp model versions, lab-notebook gitignored,
+  conclusions only land as research notes.
 
 ## Research notes
 
-Permanent, citable deep-dives under `docs/research/`:
+Public-eligible surveys, design docs, and method writeups under `docs/research/`:
 
 | Document | Scope |
 |---|---|
+| `host-side-auto-ensemble-method.md` | The 4-oracle no-human label pipeline + LOSO discipline + ablation findings |
+| `data-vault-redesign-20260425.md` | Why we removed humans from label production |
+| `cry-detect-data-program-plan.md` | Long-term roadmap to first real training run |
 | `cry-detect-starter-plan.md` | Why pretrained YAMNet over ESPDet/custom training |
-| `deployment-01-log-analysis-20260418.md` | 8-hour overnight run — 14 elevated-RMS windows, 0 alerts, compression diagnosis |
-| `retraining-roi-analysis.md` | Recalibration vs. head-retraining vs. full-finetune ROI |
-| `classification-logging-plan.md` | Stage 2.6a: log all watched-class confidences per inference |
-| `file-api-plan.md` | Stage 2.7 spec (this release) |
-| `runtime-robustness-plan.md` | Six bug classes + prevention catalogue |
+| `crying-detection-s3-ml-alternatives.md` | Alternative ML approaches considered + rejected |
 | `yamnet-class-exploitation.md` | 20 watched AudioSet classes: cry spectrum, joy context, FP sources |
-
+| `retraining-roi-analysis.md` | Recalibration vs. head-retraining vs. full-finetune ROI |
+| `log-management-design-20260423.md` | Vault layout + extraction protocol design |
+| `classification-logging-plan.md` | Stage 2.6a: log all watched-class confidences per inference |
+| `file-api-plan.md` | Stage 2.7 spec |
+| `runtime-robustness-plan.md` | Six bug classes + prevention catalogue |
+| `feasibility-s3-camera-project.md` | Vision-side feasibility (de-prioritised; cataloguing only) |
+| `prior-art-survey.md`, `pretrained-espdl-inventory.md`, `yolo26-and-esp-dl-2026.md`, `yolo26-s3-port-plan.md` | Vision-side surveys (archived) |
 ## ESP-IDF
 
 - **Version required:** ≥ v5.5.1 (we use 5.5.3 at `~/esp/esp-idf`)
