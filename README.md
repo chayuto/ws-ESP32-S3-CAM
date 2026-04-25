@@ -64,6 +64,7 @@ Public-eligible surveys, design docs, and method writeups under `docs/research/`
 | Document | Scope |
 |---|---|
 | `host-side-auto-ensemble-method.md` | The 4-oracle no-human label pipeline + LOSO discipline + ablation findings |
+| `repo-boundary-yamnet-cry-distill.md` | Boundary between this device-side workspace and the planned `yamnet-cry-distill-int8` training repo |
 | `data-vault-redesign-20260425.md` | Why we removed humans from label production |
 | `cry-detect-data-program-plan.md` | Long-term roadmap to first real training run |
 | `cry-detect-starter-plan.md` | Why pretrained YAMNet over ESPDet/custom training |
