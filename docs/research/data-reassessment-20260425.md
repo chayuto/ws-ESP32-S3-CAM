@@ -17,16 +17,22 @@ to defer:
 
 | action | usability | size | when |
 |---|---|---|---|
-| Re-PTQ the on-device tflite with real-data calibration | ✅ ready | 318 (or 250 high-tier) | this week |
+| ~~Re-PTQ the on-device tflite with real-data calibration~~ | ❌ tested 2026-04-25, regresses on FPs (see §A) | — | revisit with mixed/INT16 strategy later |
 | Train a small cry-vs-not-cry head on YAMNet embeddings | ✅ ready | 250 high-tier | this week |
 | Calibrate firmware threshold from real on-device data | ⚠️ one-session sample | 27 captures from 04-24 | next week (need 2-3 more sessions) |
 | Build a cry sub-type / urgency classifier | ⚠️ cluster IDs are heuristic, not validated | 27-50/cluster | defer until human-validated urgency labels exist |
 | Public dataset release | ❌ too small, single-baby, single-env | — | when ≥ 1000 captures across ≥ 3 environments |
 
-The single highest-value action is **re-PTQ + reflash**: it directly
-lifts the on-device model's accuracy from "barely useful" to
-"matches FP32 YAMNet" on this baby's voice. Cost ~30 min. Justified
-by `deep-analysis-20260423.md` §Q1.
+**Originally** we recommended re-PTQ as the highest-value single
+action. We tried it 2026-04-25; **it regresses** (real cries lose
+0.03–0.19 confidence; FPs jump from 0.0 to 0.79). See §A for the
+diagnosis. The mel-fix already gave us the win we needed for the
+on-device model.
+
+The current single highest-value action is **(B) train a small
+cry head on YAMNet embeddings** as a 3rd ensemble oracle. ~2 h of
+work, 250 training-eligible captures available, doesn't touch
+firmware.
 
 ## 1. Inventory (what we have)
 
@@ -151,27 +157,53 @@ misses, that's a critical finding for retraining strategy.
 
 ## 2. Usability matrix — what data is good for what
 
-### A. Re-PTQ the on-device YAMNet — ✅ READY NOW
+### A. Re-PTQ the on-device YAMNet — ❌ EMPIRICALLY REJECTED 2026-04-25
 
-- **Need:** 100-300 calibration patches representative of production
-  audio distribution (cry + silence + speech + ambient).
-- **Have:** 318 captures with full per-frame log-mel features; can
-  produce 1000+ patches by sampling peak-energy + random frames
-  per WAV.
-- **Status:** the conversion script `hf/convert_yamnet.py` already
-  takes `--audio-dir`. The earlier attempt in `deep-analysis-
-  20260423.md` §Q1 ran but didn't produce a meaningful output-scale
-  improvement (because the bug was the firmware-side double-sigmoid,
-  fixed by `959a261`). Re-running now would produce the
-  representative-data-calibrated model.
-- **Why bother now if mel-fix already works?** The mel-fix moved
-  the on-device model from 0.066 ceiling → 0.934 peak. But INT8
-  PTQ has its own loss; deep-analysis §Q1 measured ~3-4 pp on
-  high-confidence cries (FP32 0.978 → INT8 0.946). Real-data
-  calibration could close that gap.
-- **Cost:** ~10 min host + 1 reflash window.
-- **Risk:** low — current model works; if new model doesn't,
-  revert by re-flashing the saved old `spiffs/yamnet.tflite`.
+- **Original hypothesis:** real-data calibration of the INT8 PTQ
+  would close the residual 3-4 pp gap from FP32 YAMNet
+  (`deep-analysis-20260423.md` §Q1).
+- **What we tried:** built `tools/repTQ_yamnet.py` to walk all 318
+  captures and produce 954 calibration patches (peak / mid / low
+  energy per WAV via YAMNet reference feature pipeline). Ran PTQ
+  with these as `representative_dataset`. Wrote candidate to
+  `/tmp/yamnet_v2_realdata.tflite`. **Did NOT overwrite the
+  deployed `spiffs/yamnet.tflite`.**
+- **Empirical outcome on 04-24 cry cluster + earlier confirmed
+  FPs (offline test, FP32-mel input):**
+
+| WAV | YAMNet GT | current peak | new peak | delta |
+|---|---:|---:|---:|---:|
+| 23:47 cry  | 0.996 | 0.934 | 0.832 | **−0.10** |
+| 23:56 cry  | 0.976 | 0.934 | 0.848 | −0.09 |
+| 23:58 cry  | 0.988 | 0.934 | 0.898 | −0.04 |
+| 1 am 04-21 | 0.997 | 0.934 | 0.824 | −0.11 |
+| bedtime 04-20 | 0.999 | 0.934 | 0.742 | **−0.19** |
+| 1 am 04-19 | 0.999 | 0.934 | 0.848 | −0.09 |
+| morning FP | 0.008 | 0.000 | **0.629** | **+0.63 (FP!)** |
+| morning FP2 | 0.001 | 0.000 | **0.785** | **+0.78 (FP!)** |
+
+  Real cries lost 0.03–0.19 peak confidence; confirmed FPs jumped
+  from 0.0 → 0.6–0.79. The new model would alert constantly on
+  adult speech.
+
+- **Diagnosis:** real captures span a NARROW log-mel distribution
+  (min −6.82, max +4.53, mean −3.17, std 1.53). PTQ packed int8
+  levels tightly around that centre, losing dynamic range at the
+  tails where cries vs FPs differ. The original synthetic
+  calibration (Gaussian, std 3) covered a much wider distribution
+  → quantizer had granularity to spare on the actual data range.
+  Synthetic-broad beats real-narrow when test distribution sits
+  inside calibration distribution.
+- **Decision: keep the current `spiffs/yamnet.tflite`.** Revisit
+  with one of:
+  - mixed real + synthetic calibration (broaden the tails),
+  - INT16 output type (more headroom on the cry-class side),
+  - dedicated baby-cry model trained from scratch on this data,
+    PTQ'd with its own representative dataset.
+- **Lesson:** "real-data calibration" is intuitive but not always
+  better. PTQ is sensitive to the BREADTH of the calibration
+  distribution, not just its representativeness. Document this so
+  we don't try the same thing again.
 
 ### B. Train a per-baby cry classifier head — ✅ READY NOW
 
