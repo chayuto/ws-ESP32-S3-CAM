@@ -12,9 +12,12 @@ publish recordings, derived labels, trained models, or analyses that
 reference real captures, and nobody is meant to retrain from this data.
 
 **Public-eligible (commit freely):** firmware C/C++/Python under
-`projects/*/main`, `projects/*/tools`, `projects/*/www`, design docs
-that don't reference real session data, the blog post at
-`docs/blog/`, slash commands under `.claude/commands/`.
+`projects/*/main`, `projects/*/tools`, `projects/*/www`, the blog post
+at `docs/blog/`, slash commands under `.claude/commands/`, and
+**`docs/research/`** — survey, prior-art, design, and planning docs
+sourced from public information are fine to commit. The only docs
+gitignored under `docs/research/` are the date-stamped patterns that
+narrate real captures (see below).
 
 **Private (kept local, gitignored — never `git add -f`):**
 - `datasets/` — captures, labels, releases, inventories.
