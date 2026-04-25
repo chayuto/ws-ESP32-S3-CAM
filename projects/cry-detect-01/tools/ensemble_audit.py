@@ -74,8 +74,9 @@ PROJECT = REPO / "projects" / "cry-detect-01"
 DATASET = REPO / "datasets" / "cry-detect-01"
 MASTER  = DATASET / "labels" / "master.csv"
 
-ENSEMBLE_VERSION = "v0.1"
+ENSEMBLE_VERSION = "v0.2"  # bumped 2026-04-25 — adds embed_clf 3rd oracle
 YAMNET_ORACLE_VERSION = "google/yamnet/1"
+EMBED_CLF_PATH = Path(__file__).resolve().parents[1] / "hf" / "embed_clf_v0.1.pkl"
 
 # YAMNet AudioSet class indices (matches main/metrics.c watched list)
 YAM_POS_IDX = {"baby_cry_infant": 20, "crying_sobbing": 19,
@@ -318,14 +319,73 @@ def parse_human_note(note: str) -> tuple[str, str]:
     return ("", text)
 
 
-def confidence_tier(yam: float, feat: float) -> str:
-    agreement = abs(yam - feat)
-    consensus = 0.5 * (yam + feat)
-    if agreement < 0.2 and consensus >= 0.7: return "high_pos"
-    if agreement < 0.2 and consensus <= 0.1: return "high_neg"
-    if consensus >= 0.4: return "medium_pos"
-    if agreement < 0.3 and consensus < 0.4: return "medium_neg"
+def confidence_tier(scores: list[float]) -> str:
+    """3-oracle combiner. Args: [yam, feat, embed] (drop None for missing).
+
+    high_pos : all 3 agree-ish and consensus >= 0.7
+    high_neg : all 3 agree-ish and consensus <= 0.1
+    medium_pos : consensus >= 0.4
+    medium_neg : consensus <  0.4 with low spread
+    low      : at least one oracle disagrees (max - min >= 0.4)
+    """
+    s = [x for x in scores if x is not None]
+    if not s: return "low"
+    spread = max(s) - min(s)
+    consensus = sum(s) / len(s)
+    if spread < 0.2 and consensus >= 0.7: return "high_pos"
+    if spread < 0.2 and consensus <= 0.1: return "high_neg"
+    if spread < 0.4 and consensus >= 0.4: return "medium_pos"
+    if spread < 0.4 and consensus < 0.4: return "medium_neg"
     return "low"
+
+
+# embed_clf is loaded once at module import; YAMNet oracle is loaded
+# lazily because TF Hub takes ~1 s and not all callers need it.
+_embed_clf_bundle = None
+_yamnet_hub = None
+
+def _load_embed_clf():
+    global _embed_clf_bundle
+    if _embed_clf_bundle is not None: return _embed_clf_bundle
+    import pickle
+    if not EMBED_CLF_PATH.exists():
+        print(f"[embed_clf] missing {EMBED_CLF_PATH}; skipping 3rd oracle", file=sys.stderr)
+        return None
+    with open(EMBED_CLF_PATH, "rb") as f:
+        _embed_clf_bundle = pickle.load(f)
+    print(f"[embed_clf] loaded v{_embed_clf_bundle['version']} (LOSO acc={_embed_clf_bundle['loso_acc']:.3f}, AUC={_embed_clf_bundle['loso_auc']:.4f})")
+    return _embed_clf_bundle
+
+def _load_yamnet():
+    global _yamnet_hub
+    if _yamnet_hub is not None: return _yamnet_hub
+    import tensorflow_hub as hub
+    print("[embed_clf] loading FP32 YAMNet for embeddings...")
+    _yamnet_hub = hub.load("https://tfhub.dev/google/yamnet/1")
+    return _yamnet_hub
+
+def embed_score_for_wav(wav_path: Path) -> Optional[float]:
+    """Run YAMNet → embeddings → embed_clf for one WAV. Returns probability
+    of cry, or None if extraction failed."""
+    bundle = _load_embed_clf()
+    if bundle is None: return None
+    try:
+        import tensorflow as tf
+        yam = _load_yamnet()
+        wav_bin = tf.io.read_file(str(wav_path))
+        wav, sr = tf.audio.decode_wav(wav_bin, desired_channels=1)
+        if sr.numpy() != 16000: return None
+        samples = tf.squeeze(wav, axis=-1)
+        _, embeddings, _ = yam(samples)
+        emb = embeddings.numpy()  # (T, 1024)
+        if emb.shape[0] == 0: return None
+        import numpy as np
+        feat = np.concatenate([emb.mean(axis=0), emb.max(axis=0)])
+        feat_scaled = bundle["scaler"].transform(feat[None])
+        return float(bundle["classifier"].predict_proba(feat_scaled)[0, 1])
+    except Exception as e:
+        print(f"[embed_clf] {wav_path.name}: {type(e).__name__}: {e}", file=sys.stderr)
+        return None
 
 
 def main():
@@ -376,14 +436,25 @@ def main():
         # Temporal
         n_total, n_high = temporal.get(fn, (0, 0))
 
-        # Combiner
-        if feat_clf_prob is None:
-            tier = "low"  # missing oracle = low confidence by default
-            agreement = None; consensus = None
+        # Embed-clf 3rd oracle: YAMNet embeddings → small classifier.
+        # WAV-path resolution mirrors load_all_sessions cumulative layout.
+        wav_path = None
+        for cand_sess in ("night-20260424", "night-20260422", "night-20260421",
+                          "night-20260420", r["session_id"]):
+            wp = PROJECT / "logs" / cand_sess / "wavs" / fn
+            if wp.exists():
+                wav_path = wp; break
+        embed_clf_prob = embed_score_for_wav(wav_path) if wav_path else None
+
+        # Combiner — now over up to 3 oracles
+        scores = [ys["yam_cry_score"], feat_clf_prob, embed_clf_prob]
+        scores_valid = [x for x in scores if x is not None]
+        if not scores_valid:
+            tier = "low"; agreement = None; consensus = None
         else:
-            agreement = abs(ys["yam_cry_score"] - feat_clf_prob)
-            consensus = 0.5 * (ys["yam_cry_score"] + feat_clf_prob)
-            tier = confidence_tier(ys["yam_cry_score"], feat_clf_prob)
+            consensus = sum(scores_valid) / len(scores_valid)
+            agreement = max(scores_valid) - min(scores_valid)  # spread
+            tier = confidence_tier(scores)
 
         # Trigger reading
         trig = trigs_by_session.get(r["session_id"], {}).get((r["ts_iso"] or "")[:19])
@@ -420,6 +491,9 @@ def main():
 
             # Feature classifier
             "feat_clf_prob": f"{feat_clf_prob:.4f}" if feat_clf_prob is not None else "",
+
+            # Embedding classifier (3rd oracle, v0.1)
+            "embed_clf_prob": f"{embed_clf_prob:.4f}" if embed_clf_prob is not None else "",
 
             # Cluster
             "cluster_id": cluster_id if cluster_id is not None else "",
