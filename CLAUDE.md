@@ -5,6 +5,38 @@ Workspace for the **Waveshare ESP32-S3-CAM-GC2145** (SKU 33702, P/N `ESP32-S3-CA
 The board is the GC2145 sensor variant of Waveshare's ESP32-S3-CAM-OVxxxx platform — same
 carrier board, only the DVP camera module differs (OV5640 / OV3660 / GC2145 / GC0308).
 
+## Publish boundary — read this before committing
+
+This repo is public. We publish **firmware + tooling only.** We do not
+publish recordings, derived labels, trained models, or analyses that
+reference real captures, and nobody is meant to retrain from this data.
+
+**Public-eligible (commit freely):** firmware C/C++/Python under
+`projects/*/main`, `projects/*/tools`, `projects/*/www`, design docs
+that don't reference real session data, the blog post at
+`docs/blog/`, slash commands under `.claude/commands/`.
+
+**Private (kept local, gitignored — never `git add -f`):**
+- `datasets/` — captures, labels, releases, inventories.
+- `projects/*/logs/` — raw device logs.
+- `projects/*/hf/*.pkl`, `projects/*/hf/*.tflite` — models trained on
+  or derived from private audio.
+- `projects/*/ml-experiments/*` — lab notebooks (only README/.gitkeep).
+- `docs/internal/` — working plans, todos, audits.
+- `docs/private/` — personal drafts.
+- `docs/research/{night-session,deployment,deep-analysis,embed-clf,data-reassessment}-*.md`
+  — narrative reports referencing capture timestamps.
+
+**When writing a new research note**, ask: would this be meaningful
+to a stranger without seeing the user's data? If no → name it to fit
+one of the private patterns above, or place it in `docs/internal/`.
+If unsure, ask the user before committing.
+
+**When updating tooling that auto-generates a report** (e.g.
+`build_inventory.py` → `INVENTORY.md`, `freeze_release.py` →
+`releases/*.json`), the *tool* is public, but its *output* is private
+and stays gitignored under `datasets/`.
+
 ## Repo Layout
 
 ```

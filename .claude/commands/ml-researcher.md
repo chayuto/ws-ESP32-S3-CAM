@@ -124,30 +124,38 @@ in the lab notebook with the timestamp.
 
 Decide one of:
 
-- **(A) Significant outcome — durable.** Write a research note to
-  `docs/research/<topic>-YYYYMMDD.md` summarizing hypothesis, method,
-  result, conclusion, next steps. Include numerical evidence inline.
-  Cross-reference the experiment dir in case future-us wants to re-run.
-  Then commit the research note.
+- **(A) Significant outcome — durable.** Write a research note
+  summarizing hypothesis, method, result, conclusion, next steps.
+  Include numerical evidence inline. Cross-reference the experiment
+  dir in case future-us wants to re-run.
+  - **Where to write it:** `docs/internal/<topic>-YYYYMMDD.md` if it
+    references real captures, capture timestamps, or numbers derived
+    from our private data (this is the usual case — `docs/internal/`
+    is gitignored). Use `docs/research/<topic>-YYYYMMDD.md` only when
+    the note is purely about method/tooling and would be meaningful
+    without our data. If unsure, default to `docs/internal/` — see
+    `CLAUDE.md` "Publish boundary".
+  - Notes in `docs/internal/` are kept local. Notes in `docs/research/`
+    are committed.
 
 - **(B) Null / unsurprising — ephemeral.** Update the lab notebook
-  with the conclusion, leave the experiment dir on disk, do NOT commit
-  a research note. The notebook is enough — it's there if a future
-  experiment needs to verify what we already saw.
+  with the conclusion, leave the experiment dir on disk, do NOT write
+  a separate research note. The notebook is enough — it's there if a
+  future experiment needs to verify what we already saw.
 
 - **(C) Negative result — durable.** Treat as (A). Negative results
-  prevent re-treading. Examples in this project: `data-reassessment-
-  20260425.md` §A (re-PTQ regression). Always commit these.
+  prevent re-treading. Same private/public split as (A) — most land
+  in `docs/internal/` because they reference our data.
 
 The boundary is "would future-us benefit from learning this in 3 months
 without reading the lab notebook?" If yes → (A) or (C). If no → (B).
 
 ### Step 5 — Update inventory if needed
 
-If the experiment changed `master.csv` (e.g. added an oracle),
-re-run `tools/build_inventory.py` so `INVENTORY.md` reflects current
-state. Commit the regenerated inventory alongside any committed
-research note.
+If the experiment changed `master.csv` (e.g. added an oracle), re-run
+`tools/build_inventory.py` so `INVENTORY.md` reflects current state.
+Both `master.csv` and `INVENTORY.md` are gitignored (under `datasets/`)
+— regenerating refreshes the local snapshot only; nothing to commit.
 
 ---
 
