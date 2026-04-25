@@ -91,9 +91,12 @@ When the new repo is created, move:
 - `projects/cry-detect-01/tools/repTQ_yamnet.py` → new repo
   `src/quantize/repTQ.py`. Negative-result writeup stays as a research
   note in `ws-ESP32-S3-CAM/docs/research/`.
+- `.claude/commands/ml-researcher.md` → new repo
+  `.claude/commands/ml-researcher.md`. Single source of truth lives in
+  the training repo; ESP32-side `CLAUDE.md` cross-references it for
+  the (smaller) sklearn fits that happen here for the auto-ensemble.
 
-That is the only file with a clean "training-side" home today. The
-rest of the training pipeline (teacher loader, student architectures,
+The rest of the training pipeline (teacher loader, student architectures,
 data loaders, training loop, eval, quantization) is *new code* that
 starts life in the new repo — there's nothing else to migrate.
 

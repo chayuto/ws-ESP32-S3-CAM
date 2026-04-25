@@ -167,12 +167,19 @@ material. Method documented in
 | `audit_pipeline.sh` | Numeric features + YAMNet FP32 oracle on a WAV directory |
 | `score_yamnet.py` | YAMNet FP32 inference on raw WAVs (host-side oracle) |
 | `cry_monitor.sh` | Long-running heartbeat monitor with anomaly streaming |
-| `repTQ_yamnet.py` | INT8 PTQ harness — recalibration with real audio (currently a documented negative result; keeps the synthetic-noise calibrated tflite shipped) |
 
-ML experiments live under `ml-experiments/<YYYY-MM-DD-topic>/` (the
-directory is gitignored — only the conventions README is committed).
-Each experiment carries a `config.json` model-version stamp. See the
-`/ml-researcher` slash command for the canonical workflow.
+The INT8 PTQ harness (`repTQ_yamnet.py`, documented negative result)
+has migrated to the sibling training repo `yamnet-cry-distill-int8`
+along with the `/ml-researcher` skill. See
+[`docs/research/repo-boundary-yamnet-cry-distill.md`](../../docs/research/repo-boundary-yamnet-cry-distill.md)
+for the full repo split.
+
+For any local ML/sklearn work in this repo (e.g. fitting the auto-
+ensemble's `feat_clf` and `embed_clf` LogReg oracles), the
+`/ml-researcher` discipline still applies — pre-register, stamp model
+versions, gitignore the lab notebook, commit only durable conclusions.
+The canonical skill lives in the training repo. Experiments live
+under `ml-experiments/<YYYY-MM-DD-topic>/` (gitignored).
 
 ## Troubleshooting
 
