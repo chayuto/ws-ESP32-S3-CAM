@@ -42,6 +42,27 @@ projects/*/tools/.yamnet_work/
 # Personal drafts, negotiation notes, anything not for publication
 docs/private/
 
+# Internal working notes (plans, todos, audits) — kept local, not for public repo.
+docs/internal/
+
+# Session reports + analyses that reference real-home capture timestamps.
+# Patterns match dated files; if you add a new analysis that references
+# real session data, name it to fit one of these or move under docs/internal/.
+docs/research/night-session-*.md
+docs/research/deployment-*.md
+docs/research/deep-analysis-*.md
+docs/research/embed-clf-*.md
+docs/research/data-reassessment-*.md
+
+# Auto-generated label table + release snapshots — both expose per-capture
+# wallclock timestamps from real recordings. Backed up via tools/backup-data.sh.
+datasets/cry-detect-01/labels/master.csv
+datasets/cry-detect-01/releases/
+
+# Trained model artifacts derived from private audio (sklearn pickles, etc).
+# yamnet.tflite is already covered by the projects/*/hf/*.tflite rule above.
+projects/*/hf/*.pkl
+
 # ML researcher's lab notebooks — gitignored like raw data.
 # Conventions in `.claude/commands/ml-researcher.md` §Workflow.
 # Only the experiments-dir conventions README is in git;
