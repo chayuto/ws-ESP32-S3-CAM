@@ -74,13 +74,16 @@ menu "Cry-detect-01"
 
         config CRY_STUDENT_TENSOR_ARENA_KB
             int "Student tensor arena (KB, PSRAM)"
-            default 96
-            range 32 512
+            default 256
+            range 32 1024
             depends on CRY_STUDENT_ENABLED
             help
-                Student is ~50× smaller than YAMNet so 96 KB is generous.
-                Watch boot log for arena_used_bytes vs allocated and trim
-                if PSRAM pressure becomes a constraint elsewhere.
+                Static host estimate of student.tflite tensor sizes is
+                ~170 KB before TFLite-Micro's lifetime-aware buffer reuse;
+                the real on-device number is usually 50-70 % of that, but
+                we default to 256 KB for headroom. Watch boot log for
+                arena_used_bytes vs allocated and trim if PSRAM pressure
+                becomes a constraint elsewhere.
 
         config CRY_STUDENT_VERSION
             string "Student model version tag"
