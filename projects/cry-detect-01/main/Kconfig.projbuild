@@ -241,6 +241,64 @@ menu "Cry-detect-01"
 
     endmenu
 
+    menu "Sync subsystem (Phase B)"
+
+        config CRY_SYNC_HOURLY_BUCKETS
+            bool "Hourly-bucketed inference logs (infer-YYYYMMDDTHH.jsonl)"
+            default n
+            help
+                Replaces day-bucketed JSONL with hourly. Closed hour-buckets
+                are immutable and registered with the sync ledger. Only the
+                current hour's file is mutable. No gzip yet; that lands as
+                B.5 once core-0 CPU has been measured. Off keeps the
+                day-bucketed behavior used pre-Phase-B.
+
+        config CRY_SYNC_RANGE_GET
+            bool "Support Range: bytes=N- on /files/get (HTTP 206)"
+            default y
+            help
+                Single-range only. Cheap to support; no protocol cost when
+                the client doesn't send Range. Defaults to y because it's
+                safe and unblocks the new sync.py resume path.
+
+        config CRY_SYNC_LEDGER_ENABLED
+            bool "Enable .sync-ledger.jsonl (per-file sync state)"
+            default n
+            help
+                Append-only JSONL on /sdcard/.sync-ledger.jsonl. Records
+                file create + ack events. Required for /manifest.json to
+                report sha256 + sync_state. Hourly compaction.
+
+        config CRY_SYNC_LEDGER_MAX_FILES
+            int "Max tracked files in sync ledger (in-memory hash)"
+            default 4096
+            range 256 16384
+            depends on CRY_SYNC_LEDGER_ENABLED
+            help
+                In-memory hash of the latest state per path. Each entry
+                is ~64 bytes; default 4096 = ~256 KB PSRAM. Overflow logs
+                a warning and forces compaction.
+
+        config CRY_SYNC_API_ENABLED
+            bool "Expose /manifest.json + /sync/ack endpoints"
+            default n
+            depends on CRY_SYNC_LEDGER_ENABLED
+            help
+                Manifest is paginated (since=<unix_seconds>) and
+                chunk-streamed. /sync/ack flips per-file sync_state from
+                pending to synced. Old /files/* endpoints stay live.
+
+        config CRY_SYNC_SESSION_MARKER
+            bool "Write /sdcard/.session-started-<ISO>.json on first boot"
+            default n
+            help
+                One marker per boot, idempotent (skipped if a marker for
+                the current boot_count was already written). Lets the
+                host's sync.py identify session boundaries without a
+                server-side database.
+
+    endmenu
+
     menu "Log retention"
 
         config CRY_LOG_RETENTION_ENABLED

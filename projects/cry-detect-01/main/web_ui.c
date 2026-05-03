@@ -14,6 +14,7 @@
 
 #include "sd_logger.h"
 #include "file_api.h"
+#include "sync_api.h"
 #include "led_alert.h"
 #include "breadcrumb.h"
 
@@ -353,6 +354,13 @@ esp_err_t web_ui_start(uint32_t max_sse_clients)
     httpd_register_uri_handler(s_server, &h_cdi);
     httpd_register_uri_handler(s_server, &h_cdg);
     httpd_register_uri_handler(s_server, &h_cde);
+
+#if CONFIG_CRY_SYNC_API_ENABLED
+    httpd_uri_t h_manifest = { .uri = "/manifest.json", .method = HTTP_GET,  .handler = sync_api_manifest };
+    httpd_uri_t h_ack      = { .uri = "/sync/ack",      .method = HTTP_POST, .handler = sync_api_ack };
+    httpd_register_uri_handler(s_server, &h_manifest);
+    httpd_register_uri_handler(s_server, &h_ack);
+#endif
 
 #if CONFIG_CRY_STREAM_COMPILED_IN
     httpd_uri_t h_stream = { .uri = "/audio.pcm", .method = HTTP_GET, .handler = audio_stream_http_handler };

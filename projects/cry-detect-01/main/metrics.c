@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -20,6 +21,9 @@
 #if CONFIG_CRY_STREAM_COMPILED_IN
 #include "audio_stream.h"
 #endif
+/* sync_ledger.h provides stub fns + sync_stats_t even when the feature
+ * is disabled, so this include is unconditional. */
+#include "sync_ledger.h"
 
 static const char *TAG = "metrics";
 
@@ -359,10 +363,28 @@ size_t metrics_to_json(char *buf, size_t max_len)
     n += snprintf(buf + n, max_len - n,
         "},\"student\":{\"version\":\"%s\",\"loaded\":%s,"
         "\"cry_conf\":%.3f,\"speech_conf\":%.3f,"
-        "\"latency_ms\":%d,\"inference_count\":%u}}",
+        "\"latency_ms\":%d,\"inference_count\":%u}",
         student_version(),
         m.student_loaded ? "true" : "false",
         (double)m.student_cry_conf, (double)m.student_speech_conf,
         (int)m.student_latency_ms, (unsigned)m.student_inference_count);
+
+    /* Phase B: sync subsystem stats. Always present (stable schema); when
+     * CONFIG_CRY_SYNC_LEDGER_ENABLED is off, sync_ledger_get_stats's stub
+     * zeros the struct. Lets the host dashboard track unsynced data
+     * buildup over time. */
+    sync_stats_t ss;
+    sync_ledger_get_stats(&ss);
+    uint32_t now_unix = (uint32_t)(time(NULL));
+    uint32_t oldest_age_s =
+        (ss.oldest_pending_mtime > 0 && now_unix > ss.oldest_pending_mtime)
+        ? (now_unix - ss.oldest_pending_mtime) : 0;
+    n += snprintf(buf + n, max_len - n,
+        ",\"sync\":{\"pending_count\":%u,\"synced_count\":%u,"
+         "\"bytes_pending\":%llu,\"bytes_synced\":%llu,"
+         "\"oldest_pending_age_s\":%u,\"total_tracked\":%u}}",
+        (unsigned)ss.pending_count, (unsigned)ss.synced_count,
+        (unsigned long long)ss.bytes_pending, (unsigned long long)ss.bytes_synced,
+        (unsigned)oldest_age_s, (unsigned)ss.total_tracked);
     return (size_t)n;
 }

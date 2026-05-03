@@ -82,3 +82,17 @@ CONFIG_BSP_I2C_CLK_SPEED_HZ=400000
 CONFIG_BSP_SD_MOUNT_POINT="/sdcard"
 
 CONFIG_TFLITE_MICRO_USE_ESP_NN=y
+
+# --- Phase B sync subsystem (data-extraction-redesign-20260503) ---
+# Hourly-bucketed JSONL inference logs (immutable closed buckets).
+CONFIG_CRY_SYNC_HOURLY_BUCKETS=y
+# Range: bytes=N- on /files/get (HTTP 206) — defaults y in Kconfig too,
+# pinned here for clarity.
+CONFIG_CRY_SYNC_RANGE_GET=y
+# Per-file sync state ledger on /sdcard/.sync-ledger.jsonl.
+CONFIG_CRY_SYNC_LEDGER_ENABLED=y
+CONFIG_CRY_SYNC_LEDGER_MAX_FILES=4096
+# Manifest + ack endpoints (/manifest.json, /sync/ack).
+CONFIG_CRY_SYNC_API_ENABLED=y
+# /sdcard/.session-started-<ISO>.json on first boot.
+CONFIG_CRY_SYNC_SESSION_MARKER=y

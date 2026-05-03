@@ -16,6 +16,7 @@
 #include "esp_heap_caps.h"
 #include "esp_core_dump.h"
 #include "esp_partition.h"
+#include "sdkconfig.h"
 
 #include "sd_logger.h"
 
@@ -118,7 +119,45 @@ esp_err_t file_api_ls(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* ---- /files/get ---- */
+/* ---- /files/get ----
+ *
+ * Phase B (CONFIG_CRY_SYNC_RANGE_GET): honors a single-range Range header
+ * `Range: bytes=N-` or `Range: bytes=N-M`, returning 206 Partial Content
+ * with a Content-Range header. Multi-range requests are rejected with 416.
+ * Without the header, behavior is identical to the pre-Phase-B path:
+ * 200 OK + chunked full-file body. */
+
+#if CONFIG_CRY_SYNC_RANGE_GET
+/* Parses "bytes=N-" or "bytes=N-M" into [start, end_inclusive].
+ * Returns:
+ *   1  parsed valid single range
+ *   0  no Range header present
+ *  -1  malformed / multi-range / unsatisfiable */
+static int parse_range_header(httpd_req_t *req, long file_size,
+                              long *out_start, long *out_end)
+{
+    char hdr[64];
+    if (httpd_req_get_hdr_value_str(req, "Range", hdr, sizeof(hdr)) != ESP_OK) {
+        return 0;  /* no header */
+    }
+    if (strncmp(hdr, "bytes=", 6) != 0) return -1;
+    const char *p = hdr + 6;
+    if (strchr(p, ',')) return -1;  /* multi-range */
+    char *dash = strchr(p, '-');
+    if (!dash) return -1;
+    *dash = '\0';
+    long start = -1, end = -1;
+    if (*p) start = atol(p);
+    if (*(dash + 1)) end = atol(dash + 1);
+    if (start < 0) return -1;                       /* suffix "-N" not supported */
+    if (end < 0) end = file_size - 1;
+    if (start >= file_size || end >= file_size) return -1;
+    if (start > end) return -1;
+    *out_start = start;
+    *out_end   = end;
+    return 1;
+}
+#endif
 
 esp_err_t file_api_get(httpd_req_t *req)
 {
@@ -129,17 +168,57 @@ esp_err_t file_api_get(httpd_req_t *req)
     FILE *f = fopen(path, "rb");
     if (!f) return fail(req, "404 Not Found", "fopen failed");
 
+    /* Get total size up front. Needed both for Content-Length on full GETs
+     * and for Range validation. */
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    long range_start = 0;
+    long range_end   = file_size - 1;
+    bool partial = false;
+
+#if CONFIG_CRY_SYNC_RANGE_GET
+    int rc_range = parse_range_header(req, file_size, &range_start, &range_end);
+    if (rc_range < 0) {
+        fclose(f);
+        char ra[64];
+        snprintf(ra, sizeof(ra), "bytes */%ld", file_size);
+        httpd_resp_set_hdr(req, "Content-Range", ra);
+        return fail(req, "416 Range Not Satisfiable", "bad Range");
+    }
+    if (rc_range == 1) {
+        partial = true;
+        fseek(f, range_start, SEEK_SET);
+    }
+#else
+    (void)range_start; (void)range_end;
+#endif
+
     httpd_resp_set_type(req, content_type_for(path));
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    httpd_resp_set_hdr(req, "Accept-Ranges", "bytes");
+
+    if (partial) {
+        char cr[64];
+        snprintf(cr, sizeof(cr), "bytes %ld-%ld/%ld", range_start, range_end, file_size);
+        httpd_resp_set_hdr(req, "Content-Range", cr);
+        httpd_resp_set_status(req, "206 Partial Content");
+    }
 
     size_t chunk_sz = 4096;
     char *buf = heap_caps_malloc(chunk_sz, MALLOC_CAP_SPIRAM);
     if (!buf) { fclose(f); return fail(req, "503 Service Unavailable", "no heap"); }
 
+    long remaining = partial ? (range_end - range_start + 1) : file_size;
     size_t got;
     esp_err_t rc = ESP_OK;
-    while ((got = fread(buf, 1, chunk_sz, f)) > 0) {
+    while (remaining > 0) {
+        size_t want = (remaining > (long)chunk_sz) ? chunk_sz : (size_t)remaining;
+        got = fread(buf, 1, want, f);
+        if (got == 0) break;
         if (httpd_resp_send_chunk(req, buf, got) != ESP_OK) { rc = ESP_FAIL; break; }
+        remaining -= got;
     }
     free(buf);
     fclose(f);

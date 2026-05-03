@@ -19,6 +19,9 @@ idf_component_register(
         "breadcrumb.c"
         "auto_trigger.c"
         "log_retention.c"
+        "session_marker.c"
+        "sync_ledger.c"
+        "sync_api.c"
     INCLUDE_DIRS
         "."
     EMBED_TXTFILES
@@ -43,4 +46,5 @@ idf_component_register(
         espcoredump
         esp_partition
         esp_app_format
+        mbedtls
 )

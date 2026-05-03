@@ -22,6 +22,8 @@
 #include "noise_floor.h"
 #include "metrics_logger.h"
 #include "breadcrumb.h"
+#include "session_marker.h"
+#include "sync_ledger.h"
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
@@ -350,6 +352,10 @@ static void housekeeping_task(void *arg)
 #endif
         metrics_refresh_system();
 
+        /* One-shot per boot: write /sdcard/.session-started-<ISO>.json once
+         * SD is mounted AND NTP synced. Subsequent calls are NVS-gated no-ops. */
+        session_marker_maybe_write();
+
         int64_t now = esp_timer_get_time();
         if (now >= next_serial_us) {
             next_serial_us = now + 10 * 1000000;
@@ -395,6 +401,16 @@ void app_main(void)
     metrics_set_sd_mounted(sd_logger_is_sd_mounted());
     sd_logger_event("boot", 0.0f, 0);
     breadcrumb_set("sd_mounted");
+
+    /* Phase B sync ledger: load /sdcard/.sync-ledger.jsonl into the
+     * in-memory state table so the manifest endpoint reflects existing
+     * pending/synced state across reboots. Stub when feature disabled. */
+    {
+        esp_err_t lerr = sync_ledger_init();
+        if (lerr != ESP_OK) {
+            ESP_LOGW(TAG, "sync_ledger init failed: 0x%x (non-fatal)", lerr);
+        }
+    }
 
     ESP_ERROR_CHECK(mount_yamnet_spiffs());
     breadcrumb_set("spiffs_mounted");

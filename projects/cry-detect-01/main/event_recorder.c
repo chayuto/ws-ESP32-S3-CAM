@@ -20,6 +20,11 @@
 #include "network.h"
 #include "breadcrumb.h"
 #include "metrics.h"
+#include "sdkconfig.h"
+
+#if CONFIG_CRY_SYNC_LEDGER_ENABLED
+#include "sync_ledger.h"
+#endif
 
 static const char *TAG = "rec";
 
@@ -245,6 +250,12 @@ static void recorder_task(void *arg)
             postroll_target = 0;
             s_recording = false;
             ESP_LOGI(TAG, "record complete, bytes=%u", (unsigned)data_bytes);
+
+#if CONFIG_CRY_SYNC_LEDGER_ENABLED
+            /* Phase B: register the closed WAV with the sync ledger so it
+             * shows up in /manifest.json. Best-effort; failure is non-fatal. */
+            (void)sync_ledger_register_closed(s_last_path, "wav");
+#endif
 
             char dir[48];
             snprintf(dir, sizeof(dir), "%s/%s", s_cfg.mount_prefix, s_cfg.subdir);

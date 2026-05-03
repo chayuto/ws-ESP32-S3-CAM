@@ -26,6 +26,10 @@
 #include "noise_floor.h"
 #endif
 
+#if CONFIG_CRY_SYNC_LEDGER_ENABLED
+#include "sync_ledger.h"
+#endif
+
 static const char *TAG = "mlog";
 
 #define YAMNET_CLASSES  521
@@ -48,6 +52,9 @@ static bool     s_last_student_loaded;
 static FILE *s_f;
 static char  s_path[64];
 static int   s_day_of_year;
+#if CONFIG_CRY_SYNC_HOURLY_BUCKETS
+static int   s_hour_of_day;          /* 0–23 of the file currently open */
+#endif
 static bool  s_last_ntp_synced;      /* tracks false→true edge so we reopen at sync */
 static const char *s_mount_prefix;   /* /sdcard or /logs */
 
@@ -104,9 +111,18 @@ static void make_path(char *out, size_t max)
         time_t now = time(NULL);
         struct tm tmv;
         localtime_r(&now, &tmv);
+#if CONFIG_CRY_SYNC_HOURLY_BUCKETS
+        /* Hourly bucket: infer-YYYYMMDDTHH.jsonl. Closed buckets are
+         * immutable, registered with the sync ledger, and cheap for the
+         * host to mirror once. Only the current hour's file is mutable. */
+        char stamp[24];
+        strftime(stamp, sizeof(stamp), "%Y%m%dT%H", &tmv);
+        snprintf(out, max, "%s/infer-%s.jsonl", s_mount_prefix, stamp);
+#else
         char day[16];
         strftime(day, sizeof(day), "%Y%m%d", &tmv);
         snprintf(out, max, "%s/infer-%s.jsonl", s_mount_prefix, day);
+#endif
     } else {
         /* Pre-NTP: go to a boot-local file so rows still land somewhere. */
         snprintf(out, max, "%s/infer-boot.jsonl", s_mount_prefix);
@@ -120,27 +136,59 @@ static void reopen_if_needed(void)
     localtime_r(&now, &tmv);
     bool ntp = network_is_ntp_synced();
 
-    /* Three triggers for reopen:
+    /* Triggers for reopen:
      *   1. no file yet (cold start)
-     *   2. NTP just flipped false→true (move from infer-boot → infer-YYYYMMDD)
-     *   3. NTP synced and the day number changed (midnight rollover) */
+     *   2. NTP just flipped false→true (move from infer-boot → infer-...)
+     *   3. NTP synced and bucket boundary crossed (day, or hour if hourly) */
     bool ntp_flip  = (ntp && !s_last_ntp_synced);
     bool day_flip  = (ntp && s_f != NULL && tmv.tm_yday != s_day_of_year);
-    bool need_open = (s_f == NULL) || ntp_flip || day_flip;
+#if CONFIG_CRY_SYNC_HOURLY_BUCKETS
+    bool hour_flip = (ntp && s_f != NULL && tmv.tm_hour != s_hour_of_day);
+    bool bucket_flip = day_flip || hour_flip;
+#else
+    bool bucket_flip = day_flip;
+#endif
+    bool need_open = (s_f == NULL) || ntp_flip || bucket_flip;
     if (!need_open) return;
 
     /* If this is a pure "still no file, keep trying" case (not an event-driven
      * flip), honor the exponential backoff so we don't thrash fopen once a
      * second on a stuck SD. */
-    bool event_driven = ntp_flip || day_flip;
+    bool event_driven = ntp_flip || bucket_flip;
     if (!event_driven && s_fopen_backoff_s > 0) {
         if (esp_timer_get_time() < s_next_fopen_retry_us) return;
     }
 
-    if (s_f) { fclose(s_f); s_f = NULL; }
+    /* Capture the closed file's path before we reopen, so we can register
+     * it with the sync ledger after fclose(). Closed buckets are immutable
+     * and the ledger is the source of truth for the manifest. */
+    char closed_path[64];
+    closed_path[0] = '\0';
+    if (s_f && bucket_flip) {
+        strncpy(closed_path, s_path, sizeof(closed_path) - 1);
+        closed_path[sizeof(closed_path) - 1] = '\0';
+    }
+
+    if (s_f) {
+        fflush(s_f);
+        fsync(fileno(s_f));
+        fclose(s_f);
+        s_f = NULL;
+    }
+
+#if CONFIG_CRY_SYNC_LEDGER_ENABLED
+    if (closed_path[0]) {
+        /* Best-effort; ledger is non-fatal for inference logging. */
+        (void)sync_ledger_register_closed(closed_path, "infer_log");
+    }
+#endif
+
     make_path(s_path, sizeof(s_path));
     s_f = fopen(s_path, "a");
     s_day_of_year = tmv.tm_yday;
+#if CONFIG_CRY_SYNC_HOURLY_BUCKETS
+    s_hour_of_day = tmv.tm_hour;
+#endif
     s_last_ntp_synced = ntp;
     if (!s_f) {
         metrics_increment_sd_write_error();
