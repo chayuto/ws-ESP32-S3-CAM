@@ -49,6 +49,51 @@ menu "Cry-detect-01"
         default 1024
         range 256 4096
 
+    menu "Distilled student (parallel — Phase A)"
+
+        config CRY_STUDENT_ENABLED
+            bool "Run distilled student in parallel with YAMNet"
+            default n
+            help
+                Loads a second TFLite-Micro model (the v0.x.x INT8
+                student published from chayuto/yamnet-cry-distill-int8)
+                and runs it on the same mel patches as YAMNet. Adds
+                parallel cry_conf/speech_conf/latency/version fields to
+                /metrics, the JSONL logger, and the SSE inference event.
+                Does NOT touch the detector trigger logic — teacher
+                still drives detector_submit().
+
+                Used for on-device validation before student replaces
+                teacher. See yamnet-cry-distill-int8 docs/research/
+                student-integration-plan-20260503.md.
+
+        config CRY_STUDENT_MODEL_PATH
+            string "Student .tflite path on SPIFFS"
+            default "/yamnet/student.tflite"
+            depends on CRY_STUDENT_ENABLED
+
+        config CRY_STUDENT_TENSOR_ARENA_KB
+            int "Student tensor arena (KB, PSRAM)"
+            default 96
+            range 32 512
+            depends on CRY_STUDENT_ENABLED
+            help
+                Student is ~50× smaller than YAMNet so 96 KB is generous.
+                Watch boot log for arena_used_bytes vs allocated and trim
+                if PSRAM pressure becomes a constraint elsewhere.
+
+        config CRY_STUDENT_VERSION
+            string "Student model version tag"
+            default "v0.2.0"
+            depends on CRY_STUDENT_ENABLED
+            help
+                String tag baked into every metrics_logger row, /metrics
+                response, and SSE inference event. Bump when flashing a
+                new student .tflite. Convention: matches the HuggingFace
+                v-tag of the published artifact (e.g. v0.2.0).
+
+    endmenu
+
     config CRY_DETECT_WEB_UI_ENABLED
         bool "Enable HTTP web UI"
         default y

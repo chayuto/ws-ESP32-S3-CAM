@@ -1,4 +1,5 @@
 #include "metrics.h"
+#include "student.h"  /* for student_version() in metrics_to_json */
 
 #include <string.h>
 #include <stdio.h>
@@ -146,6 +147,22 @@ void metrics_update_inference(int32_t latency_ms, float cry_conf)
     }
 
     fanout_locked();
+    xSemaphoreGive(s_lock);
+}
+
+void metrics_update_student_inference(int32_t latency_ms,
+                                      float student_cry_conf,
+                                      float student_speech_conf,
+                                      bool loaded)
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_metrics.student_loaded            = loaded;
+    s_metrics.student_cry_conf          = student_cry_conf;
+    s_metrics.student_speech_conf       = student_speech_conf;
+    s_metrics.student_latency_ms        = latency_ms;
+    if (loaded) s_metrics.student_inference_count++;
+    /* No fanout — student data piggybacks on the next teacher fanout
+     * cycle, which always immediately follows in the inference loop. */
     xSemaphoreGive(s_lock);
 }
 
@@ -336,6 +353,16 @@ size_t metrics_to_json(char *buf, size_t max_len)
         n += snprintf(buf + n, max_len - n, "%s\"%s\":%.3f",
                       i ? "," : "", cry_watched_name[i], (double)m.watched_conf[i]);
     }
-    n += snprintf(buf + n, max_len - n, "}}");
+    /* Close watched dict and emit the parallel student block. The block
+     * is always present (stable schema); when CONFIG_CRY_STUDENT_ENABLED
+     * is off, version="off" + loaded=false + zero confs. */
+    n += snprintf(buf + n, max_len - n,
+        "},\"student\":{\"version\":\"%s\",\"loaded\":%s,"
+        "\"cry_conf\":%.3f,\"speech_conf\":%.3f,"
+        "\"latency_ms\":%d,\"inference_count\":%u}}",
+        student_version(),
+        m.student_loaded ? "true" : "false",
+        (double)m.student_cry_conf, (double)m.student_speech_conf,
+        (int)m.student_latency_ms, (unsigned)m.student_inference_count);
     return (size_t)n;
 }

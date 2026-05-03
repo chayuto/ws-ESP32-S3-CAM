@@ -19,6 +19,7 @@
 #include "metrics.h"
 #include "sd_logger.h"
 #include "network.h"
+#include "student.h"     /* for student_version() in JSONL row */
 #include "sdkconfig.h"
 
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED
@@ -36,6 +37,13 @@ static float *s_last_conf;           /* [521] guarded by s_lock, PSRAM */
 static float  s_last_cry_conf;
 static int32_t s_last_latency_ms;
 static uint32_t s_last_seq;          /* monotonic publish counter */
+
+/* Parallel student snapshot — guarded by s_lock alongside the teacher
+ * fields. All zero / loaded=false when CONFIG_CRY_STUDENT_ENABLED off. */
+static float    s_last_student_cry_conf;
+static float    s_last_student_speech_conf;
+static int32_t  s_last_student_latency_ms;
+static bool     s_last_student_loaded;
 
 static FILE *s_f;
 static char  s_path[64];
@@ -202,11 +210,18 @@ static void write_row(FILE *f)
     static float conf_copy[YAMNET_CLASSES];
     float cry_conf, lat_ms;
     uint32_t seq;
+    float    student_cry_conf, student_speech_conf;
+    int32_t  student_latency_ms;
+    bool     student_loaded;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     memcpy(conf_copy, s_last_conf, YAMNET_CLASSES * sizeof(float));
     cry_conf = s_last_cry_conf;
     lat_ms   = (float)s_last_latency_ms;
     seq      = s_last_seq;
+    student_cry_conf    = s_last_student_cry_conf;
+    student_speech_conf = s_last_student_speech_conf;
+    student_latency_ms  = s_last_student_latency_ms;
+    student_loaded      = s_last_student_loaded;
     xSemaphoreGive(s_lock);
 
     int top_idx[TOPK]; float top_val[TOPK];
@@ -246,6 +261,19 @@ static void write_row(FILE *f)
                       i ? "," : "", (double)m.watched_conf[i]);
     }
     n += snprintf(buf + n, sizeof(buf) - n, "]");
+
+    /* Phase A: parallel distilled-student block. Always present (stable
+     * schema for offline analysis); when the feature is compile-time
+     * disabled, version="off" + loaded=false + zero confs. The
+     * version string lets us track which student artifact produced
+     * which row across re-flashes. */
+    n += snprintf(buf + n, sizeof(buf) - n,
+        ",\"student\":{\"version\":\"%s\",\"loaded\":%s,"
+        "\"cry_conf\":%.3f,\"speech_conf\":%.3f,\"ms\":%d}",
+        student_version(),
+        student_loaded ? "true" : "false",
+        (double)student_cry_conf, (double)student_speech_conf,
+        (int)student_latency_ms);
 
     n += snprintf(buf + n, sizeof(buf) - n,
         ",\"sys\":{\"free_heap\":%u,\"free_psram\":%u,"
@@ -341,6 +369,23 @@ void metrics_logger_publish_inference(const float *conf_521,
     s_last_cry_conf = cry_conf;
     s_last_latency_ms = latency_ms;
     s_last_seq++;
+    xSemaphoreGive(s_lock);
+}
+
+void metrics_logger_publish_student_inference(float student_cry_conf,
+                                              float student_speech_conf,
+                                              int32_t student_latency_ms,
+                                              bool student_loaded)
+{
+    if (!s_lock) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_last_student_cry_conf    = student_cry_conf;
+    s_last_student_speech_conf = student_speech_conf;
+    s_last_student_latency_ms  = student_latency_ms;
+    s_last_student_loaded      = student_loaded;
+    /* No separate seq counter — student is paired with the teacher's
+     * row. The teacher's metrics_logger_publish_inference call always
+     * happens immediately after this in the inference loop. */
     xSemaphoreGive(s_lock);
 }
 

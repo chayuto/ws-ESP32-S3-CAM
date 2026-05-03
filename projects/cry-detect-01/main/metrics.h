@@ -48,11 +48,27 @@ typedef struct {
     uint32_t audio_overrun_events;      /* count of drop events (distinct from byte total) */
 
     float watched_conf[CRY_WATCHED_N];
+
+    /* Distilled student parallel telemetry (Phase A). All zero when
+     * CONFIG_CRY_STUDENT_ENABLED is off. The fields are present in the
+     * struct unconditionally so /metrics consumers see a stable schema
+     * (with zeros + version="off") rather than missing keys. */
+    float    student_cry_conf;
+    float    student_speech_conf;
+    int32_t  student_latency_ms;
+    uint32_t student_inference_count;
+    bool     student_loaded;
 } cry_metrics_t;
 
 void metrics_init(void);
 void metrics_set_state(cry_state_t s);
 void metrics_update_inference(int32_t latency_ms, float cry_conf);
+/* Phase A: parallel student inference. Safe to call unconditionally
+ * (no-op when feature disabled, but still publishes the loaded flag). */
+void metrics_update_student_inference(int32_t latency_ms,
+                                      float student_cry_conf,
+                                      float student_speech_conf,
+                                      bool loaded);
 void metrics_update_input_rms(float rms);
 void metrics_increment_alert(void);
 void metrics_set_ntp_synced(bool v);

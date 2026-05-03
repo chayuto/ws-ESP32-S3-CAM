@@ -5,6 +5,7 @@ idf_component_register(
         "audio_stream.c"
         "mel_features.c"
         "yamnet.cc"
+        "student.cc"
         "detector.c"
         "led_alert.c"
         "network.c"

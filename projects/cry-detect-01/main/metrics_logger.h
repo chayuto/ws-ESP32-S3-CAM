@@ -34,6 +34,14 @@ void metrics_logger_publish_inference(const float *conf_521,
                                       float cry_conf,
                                       int32_t latency_ms);
 
+/* Phase A — parallel student inference. Always safe to call (no-op
+ * when CONFIG_CRY_STUDENT_ENABLED is off). The next JSONL row will
+ * include a "student":{...} block tagged with the version string. */
+void metrics_logger_publish_student_inference(float student_cry_conf,
+                                              float student_speech_conf,
+                                              int32_t student_latency_ms,
+                                              bool student_loaded);
+
 #ifdef __cplusplus
 }
 #endif

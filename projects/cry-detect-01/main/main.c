@@ -14,6 +14,7 @@
 #include "audio_capture.h"
 #include "mel_features.h"
 #include "yamnet.h"
+#include "student.h"
 #include "detector.h"
 #include "network.h"
 #include "sd_logger.h"
@@ -249,25 +250,61 @@ static void inference_task(void *arg)
          * JSONL row can compute top-10 over all AudioSet classes. */
         metrics_logger_publish_inference(all_confs, r.cry_conf, r.latency_ms);
 
+#if CONFIG_CRY_STUDENT_ENABLED
+        /* Phase A — run the distilled student on the same patch. Result
+         * is published parallel to the teacher's; detector trigger path
+         * is untouched. student_run is safe to call when not loaded
+         * (returns ESP_ERR_INVALID_STATE, result zeroed). */
+        student_result_t sr;
+        student_run(patch, &sr);
+        const bool student_loaded = student_is_loaded();
+        metrics_update_student_inference(sr.latency_ms, sr.cry_conf,
+                                         sr.speech_conf, student_loaded);
+        metrics_logger_publish_student_inference(sr.cry_conf, sr.speech_conf,
+                                                 sr.latency_ms, student_loaded);
+#endif
+
 #if CONFIG_CRY_NOISE_FLOOR_ENABLED
         detector_set_threshold(base_threshold + noise_floor_threshold_adjust());
 #endif
         detector_submit(r.cry_conf);
 
         if ((patches & 0x7) == 0) {
+#if CONFIG_CRY_STUDENT_ENABLED
+            ESP_LOGI(TAG, "infer: #%u  ms=%d  cry=%.3f  laugh=%.3f  speech=%.3f  bark=%.3f  smoke=%.3f  thr=%.2f  s_cry=%.3f s_ms=%d s_v=%s",
+                     (unsigned)patches, (int)r.latency_ms,
+                     (double)watched[0], (double)watched[7],
+                     (double)watched[4], (double)watched[10],
+                     (double)watched[19],
+                     (double)detector_get_threshold(),
+                     (double)sr.cry_conf, (int)sr.latency_ms, student_version());
+#else
             ESP_LOGI(TAG, "infer: #%u  ms=%d  cry=%.3f  laugh=%.3f  speech=%.3f  bark=%.3f  smoke=%.3f  thr=%.2f",
                      (unsigned)patches, (int)r.latency_ms,
                      (double)watched[0], (double)watched[7],
                      (double)watched[4], (double)watched[10],
                      (double)watched[19],
                      (double)detector_get_threshold());
+#endif
         }
 
-        char payload[128];
-        snprintf(payload, sizeof(payload),
-                 "{\"conf\":%.3f,\"ms\":%d,\"cry\":%.3f,\"laugh\":%.3f,\"smoke\":%.3f}",
+        /* SSE inference payload. Teacher fields (conf/ms/cry/laugh/smoke)
+         * are unchanged for back-compat with existing web UI parsers.
+         * Student fields are appended additively when enabled. */
+        char payload[256];
+        int pn = snprintf(payload, sizeof(payload),
+                 "{\"conf\":%.3f,\"ms\":%d,\"cry\":%.3f,\"laugh\":%.3f,\"smoke\":%.3f",
                  (double)r.cry_conf, (int)r.latency_ms,
                  (double)watched[0], (double)watched[7], (double)watched[19]);
+#if CONFIG_CRY_STUDENT_ENABLED
+        pn += snprintf(payload + pn, sizeof(payload) - pn,
+                 ",\"s_cry\":%.3f,\"s_speech\":%.3f,\"s_ms\":%d,\"s_loaded\":%s,\"s_ver\":\"%s\"",
+                 (double)sr.cry_conf, (double)sr.speech_conf,
+                 (int)sr.latency_ms,
+                 student_is_loaded() ? "true" : "false",
+                 student_version());
+#endif
+        pn += snprintf(payload + pn, sizeof(payload) - pn, "}");
         web_ui_push_event("inference", payload);
     }
 }
@@ -369,6 +406,22 @@ void app_main(void)
         metrics_set_state(CRY_STATE_ERROR);
         led_alert_set(LED_STATE_ERROR);
     }
+
+#if CONFIG_CRY_STUDENT_ENABLED
+    /* Phase A — distilled student loaded in parallel. Failure is non-fatal:
+     * the teacher still drives the detector regardless. We just lose the
+     * parallel telemetry and the student's "loaded":false propagates
+     * through metrics + JSONL so offline analysis sees the gap. */
+    {
+        esp_err_t serr = student_init(CONFIG_CRY_STUDENT_MODEL_PATH,
+                                      CONFIG_CRY_STUDENT_TENSOR_ARENA_KB);
+        if (serr != ESP_OK) {
+            ESP_LOGW(TAG, "student init failed: 0x%x  (teacher unaffected, student fields will be 'loaded':false)", serr);
+        } else {
+            ESP_LOGI(TAG, "student loaded: version=%s", student_version());
+        }
+    }
+#endif
 
     ESP_ERROR_CHECK(mel_features_init());
     ESP_ERROR_CHECK(audio_capture_init(CONFIG_CRY_DETECT_SAMPLE_RATE, CONFIG_CRY_DETECT_MIC_GAIN_DB));
