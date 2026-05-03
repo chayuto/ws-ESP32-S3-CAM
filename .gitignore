@@ -15,6 +15,9 @@ sdkconfig.old
 dependencies.lock
 managed_components/
 
+# Host-compiled test artifacts
+projects/*/tests/host_c/out/
+
 # Large binary model artifacts (downloaded/generated via tools/)
 projects/*/spiffs/*.tflite
 projects/*/spiffs/*.bin

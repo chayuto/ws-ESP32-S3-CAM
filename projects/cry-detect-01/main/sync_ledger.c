@@ -1,4 +1,5 @@
 #include "sync_ledger.h"
+#include "sync_ledger_table.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,49 +34,31 @@ static int                s_count;          /* live entries in s_table */
 static int                s_appends_since_compact;
 static bool               s_initialized;
 
-/* ---- helpers ---- */
+/* ---- helpers ----
+ *
+ * Pure operations on the table + JSON walker + hex_encode live in
+ * sync_ledger_table.c so the host test can exercise them without
+ * dragging in FreeRTOS / heap_caps / mbedtls. The thin wrappers below
+ * keep the original call sites unchanged. */
 
 static int find_index(const char *path)
 {
-    for (int i = 0; i < s_count; ++i) {
-        if (strcmp(s_table[i].path, path) == 0) return i;
-    }
-    return -1;
+    return sl_find_index(s_table, s_count, path);
 }
 
 static int upsert(const sync_entry_t *e)
 {
-    int i = find_index(e->path);
-    if (i >= 0) {
-        s_table[i] = *e;
-        return i;
-    }
-    if (s_count >= LEDGER_MAX_FILES) {
+    int idx = sl_upsert(s_table, &s_count, LEDGER_MAX_FILES, e);
+    if (idx < 0) {
         ESP_LOGW(TAG, "table full at %d entries; dropping %s",
                  s_count, e->path);
-        return -1;
     }
-    s_table[s_count++] = *e;
-    return s_count - 1;
+    return idx;
 }
 
 static void remove_index(int i)
 {
-    if (i < 0 || i >= s_count) return;
-    if (i != s_count - 1) {
-        s_table[i] = s_table[s_count - 1];
-    }
-    s_count--;
-}
-
-static void hex_encode(const uint8_t *raw, int n, char *out)
-{
-    static const char *H = "0123456789abcdef";
-    for (int i = 0; i < n; ++i) {
-        out[2 * i]     = H[(raw[i] >> 4) & 0xF];
-        out[2 * i + 1] = H[raw[i] & 0xF];
-    }
-    out[2 * n] = '\0';
+    sl_remove_index(s_table, &s_count, i);
 }
 
 static esp_err_t sha256_of_file(const char *path, char *out_hex)
@@ -104,7 +87,7 @@ static esp_err_t sha256_of_file(const char *path, char *out_hex)
     uint8_t raw[32];
     mbedtls_sha256_finish(&ctx, raw);
     mbedtls_sha256_free(&ctx);
-    hex_encode(raw, 32, out_hex);
+    sl_hex_encode(raw, 32, out_hex);
     return ESP_OK;
 }
 
@@ -148,41 +131,6 @@ static void format_purge_row(const char *path, char *out, size_t max)
 
 /* ---- on-disk replay ---- */
 
-/* Lightweight JSON field extractor: finds "key": value or "key":"value".
- * Returns pointer into `line` of the value start, or NULL. Caller knows
- * the expected type. Tolerates missing keys (returns NULL). */
-static const char *json_find_key(const char *line, const char *key)
-{
-    char needle[24];
-    snprintf(needle, sizeof(needle), "\"%s\":", key);
-    const char *p = strstr(line, needle);
-    if (!p) return NULL;
-    p += strlen(needle);
-    while (*p == ' ') p++;
-    return p;
-}
-
-static bool json_extract_str(const char *line, const char *key, char *out, size_t max)
-{
-    const char *p = json_find_key(line, key);
-    if (!p || *p != '"') return false;
-    p++;
-    size_t i = 0;
-    while (*p && *p != '"' && i + 1 < max) {
-        out[i++] = *p++;
-    }
-    out[i] = '\0';
-    return *p == '"';
-}
-
-static bool json_extract_uint(const char *line, const char *key, uint32_t *out)
-{
-    const char *p = json_find_key(line, key);
-    if (!p) return false;
-    *out = (uint32_t)strtoul(p, NULL, 10);
-    return true;
-}
-
 static void replay_from_disk(void)
 {
     FILE *f = fopen(LEDGER_PATH, "r");
@@ -194,9 +142,9 @@ static void replay_from_disk(void)
     int rows = 0;
     while (fgets(line, sizeof(line), f)) {
         char op[16];
-        if (!json_extract_str(line, "op", op, sizeof(op))) continue;
+        if (!sl_json_extract_str(line, "op", op, sizeof(op))) continue;
         char path[SYNC_PATH_MAX];
-        if (!json_extract_str(line, "path", path, sizeof(path))) continue;
+        if (!sl_json_extract_str(line, "path", path, sizeof(path))) continue;
 
         if (strcmp(op, "purge") == 0) {
             int i = find_index(path);
@@ -209,12 +157,12 @@ static void replay_from_disk(void)
             sync_entry_t e;
             memset(&e, 0, sizeof(e));
             strncpy(e.path, path, SYNC_PATH_MAX - 1);
-            (void)json_extract_uint(line, "size", &e.size);
-            (void)json_extract_uint(line, "mtime", &e.mtime);
-            (void)json_extract_str(line, "sha256", e.sha256_hex, sizeof(e.sha256_hex));
-            (void)json_extract_str(line, "category", e.category, sizeof(e.category));
+            (void)sl_json_extract_uint(line, "size", &e.size);
+            (void)sl_json_extract_uint(line, "mtime", &e.mtime);
+            (void)sl_json_extract_str(line, "sha256", e.sha256_hex, sizeof(e.sha256_hex));
+            (void)sl_json_extract_str(line, "category", e.category, sizeof(e.category));
             char st[16] = "pending";
-            (void)json_extract_str(line, "sync_state", st, sizeof(st));
+            (void)sl_json_extract_str(line, "sync_state", st, sizeof(st));
             e.state = (strcmp(st, "synced") == 0) ? SYNC_STATE_SYNCED : SYNC_STATE_PENDING;
             (void)upsert(&e);
             rows++;

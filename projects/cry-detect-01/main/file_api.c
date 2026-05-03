@@ -19,6 +19,7 @@
 #include "sdkconfig.h"
 
 #include "sd_logger.h"
+#include "range_parser.h"
 
 static const char *TAG = "fileapi";
 
@@ -128,8 +129,8 @@ esp_err_t file_api_ls(httpd_req_t *req)
  * 200 OK + chunked full-file body. */
 
 #if CONFIG_CRY_SYNC_RANGE_GET
-/* Parses "bytes=N-" or "bytes=N-M" into [start, end_inclusive].
- * Returns:
+/* Reads the Range header and delegates parsing to the pure helper in
+ * range_parser.c. Returns:
  *   1  parsed valid single range
  *   0  no Range header present
  *  -1  malformed / multi-range / unsatisfiable */
@@ -140,22 +141,7 @@ static int parse_range_header(httpd_req_t *req, long file_size,
     if (httpd_req_get_hdr_value_str(req, "Range", hdr, sizeof(hdr)) != ESP_OK) {
         return 0;  /* no header */
     }
-    if (strncmp(hdr, "bytes=", 6) != 0) return -1;
-    const char *p = hdr + 6;
-    if (strchr(p, ',')) return -1;  /* multi-range */
-    char *dash = strchr(p, '-');
-    if (!dash) return -1;
-    *dash = '\0';
-    long start = -1, end = -1;
-    if (*p) start = atol(p);
-    if (*(dash + 1)) end = atol(dash + 1);
-    if (start < 0) return -1;                       /* suffix "-N" not supported */
-    if (end < 0) end = file_size - 1;
-    if (start >= file_size || end >= file_size) return -1;
-    if (start > end) return -1;
-    *out_start = start;
-    *out_end   = end;
-    return 1;
+    return range_parse_value(hdr, file_size, out_start, out_end);
 }
 #endif
 

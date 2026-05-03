@@ -22,6 +22,8 @@ idf_component_register(
         "session_marker.c"
         "sync_ledger.c"
         "sync_api.c"
+        "range_parser.c"
+        "sync_ledger_table.c"
     INCLUDE_DIRS
         "."
     EMBED_TXTFILES
