@@ -91,14 +91,14 @@ Pre-NTP lines are stamped with uptime-seconds and flagged `NOT_SYNCED`; they bec
 
 ## Remote file access (Stage 2.7)
 
-Enabled by default. Whitelisted roots: `/sdcard`, `/logs`, `/yamnet`. Path traversal (`..`) is rejected.
+Enabled by default. Whitelisted roots: `/sdcard`, `/logs`, `/yamnet`. Path traversal (`..`) is rejected. The `path=` query parameter is RFC 3986 percent-decoded — filenames containing `+` (ISO 8601 timezone offsets) work with any standard URL-encoder.
 
 | Method | Endpoint | Example |
 |---|---|---|
 | `GET` | `/files/df` | `curl http://cry-detect-01.local/files/df` |
 | `GET` | `/files/ls?path=<dir>` | `curl 'http://.../files/ls?path=/sdcard'` |
 | `GET` | `/files/stat?path=<file>` | size, mtime, is_dir |
-| `GET` | `/files/get?path=<file>` | chunked streaming download |
+| `GET` | `/files/get?path=<file>` | chunked streaming download; honours `Range: bytes=N-` for resumable pulls (HTTP 206) |
 | `GET` | `/files/head?path=<file>&bytes=N` | first N bytes (max 1 MiB) |
 | `GET` | `/files/tail?path=<file>&bytes=N` | last N bytes (max 1 MiB) |
 | `DELETE` | `/files/rm?path=<file>` | refuses the currently-open log file |
@@ -110,6 +110,56 @@ mkdir -p logs/cry-detect-01-export-${TS}
 curl -s "http://cry-detect-01.local/files/get?path=/sdcard/cry-$(date +%Y%m%d).log" \
   -o logs/cry-detect-01-export-${TS}/cry-today.log
 ```
+
+## Phase B sync subsystem
+
+A manifest-driven, resumable, idempotent Wi-Fi mirror of the device's
+on-SD artifacts. Designed so a host can pull every captured WAV +
+inference log + session marker without ever touching the card,
+recover from interruptions, and re-run safely.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/manifest.json?since=<unix_seconds>&limit=<N>` | paginated list of tracked files with sha256, mtime, size, sync_state, mutable flag, and a per-boot `generation_id` |
+| `POST` | `/sync/ack` | host posts `{"files":[{"path":..., "sha256":...}, ...]}` after verifying download; device flips entries to `synced` |
+
+On-device building blocks:
+
+- **Hourly inference logs** — `infer-YYYYMMDDTHH.jsonl` (instead of day-bucketed). Closed files go into the ledger with sha + size; rollover keeps memory pressure bounded.
+- **Append-only ledger** — `/sdcard/.sync-ledger.jsonl`, fsynced after every row, atomic-rename compaction at 2 000 entries.
+- **Session markers** — `/sdcard/.session-started-<ISO>.json` written once per boot, with firmware version, boot count, and generation_id.
+- **Free-space-aware retention** stays as-is in this push (count + day caps); sync state is informational, not used to evict.
+
+Host workflow (`tools/sync.py`):
+
+```zsh
+# One-time: layout for a fresh mirror.
+tools/sync.py --host http://cry-detect-01.local --mirror logs/night-$(date +%Y%m%d) init
+
+# Pull whatever's new + ack what we verified.
+tools/sync.py --host http://cry-detect-01.local --mirror logs/night-$(date +%Y%m%d) once
+
+# Or: poll forever.
+tools/sync.py --host http://cry-detect-01.local --mirror logs/night-$(date +%Y%m%d) loop --interval 300
+```
+
+Stdlib-only Python — no Flask, no requests. State lives in
+`<mirror>/.sync/state.json` (last `since`, `generation_id`,
+pending-ack queue). Each fetch writes to `<file>.partial` and
+atomic-renames on sha verification, so an interrupted pull resumes
+via `Range: bytes=<partial_size>-` on the next pass instead of
+restarting.
+
+Pre-flash card wipe (Wi-Fi only, no eject):
+
+```zsh
+tools/wipe_sd.sh --dry-run http://cry-detect-01.local   # see what would go
+tools/wipe_sd.sh --yes     http://cry-detect-01.local   # do it
+```
+
+Validation evidence + design rationale: see
+[`docs/research/phase-b-implementation-plan-20260503.md`](../../docs/research/phase-b-implementation-plan-20260503.md)
+and the Phase B Kconfig under `Cry-detect-01` → "Sync subsystem".
 
 ## Tuning knobs
 

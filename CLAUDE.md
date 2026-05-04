@@ -188,9 +188,11 @@ Vendor example `02_esp_sr` flashed and booted OK on this unit. Boot confirmed:
 
 Change wake word via menuconfig → `CONFIG_SR_WN_*` (Hi ESP / Hi Lexin / Alexa / Jarvis / …). ESP-SR 2.1.5+ bundles many prebuilt models.
 
-## What Works Right Now (verified 2026-04-17)
+## What Works Right Now (verified 2026-04-17 / Phase B 2026-05-04)
 
 - ESP-IDF v5.5.3 toolchain builds vendor examples 01 and 02 after deleting the stale `dependencies.lock`
-- Board at `/dev/cu.usbmodem3101`, chip probe confirms ESP32-S3 rev v0.2 + 8 MB PSRAM + 16 MB flash
+- Board at `/dev/cu.usbmodem3101` (port number is per-cable; today enumerated as `1101`), chip probe confirms ESP32-S3 rev v0.2 + 8 MB PSRAM + 16 MB flash
 - `01_simple_video_server` — GC2145 detected, joined Wi-Fi, DHCP on local LAN, MJPEG stream live on port 81 @ 320×240 @ ~13 fps
 - `02_esp_sr` — ES7210 detected, WakeNet wn9_hiesp loaded from SPIFFS `model` partition, AFE pipeline running, listening for "Hi ESP"
+- **`cry-detect-01` Phase B sync** (verified 2026-05-04, all 8 post-flash steps): hourly-bucket inference logs, append-only sync ledger, `/manifest.json` paginated by mtime with sha256 + sync_state, `/sync/ack`, HTTP Range on `/files/get` for resumable pulls. `tools/sync.py` mirrors the device over Wi-Fi at ~245 KB/s with `.partial` + atomic-rename resume. `tools/wipe_sd.sh` clears the card without ejecting it. Ledger survives reboot.
+- **Dual-model inference** running parallel: YAMNet INT8 teacher at p95 508 ms + distilled `yamnet-cry-distill-int8` v0.2.0 student at 28 ms (18× faster on real ESP32-S3). Same per-tick count, additive — student is currently observation-only.
