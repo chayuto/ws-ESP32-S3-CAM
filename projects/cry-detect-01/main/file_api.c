@@ -1,5 +1,6 @@
 #include "file_api.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,11 +49,32 @@ static esp_err_t fail(httpd_req_t *req, const char *status, const char *msg)
     return ESP_FAIL;
 }
 
+/* In-place percent-decode. %XX → byte; '+' kept literal (filenames can
+ * contain it, e.g. ISO-8601 timezone offsets). Returns false on malformed
+ * %XX (anything else than two hex digits). */
+static bool url_decode_in_place(char *s)
+{
+    char *r = s, *w = s;
+    while (*r) {
+        if (*r == '%') {
+            if (!isxdigit((unsigned char)r[1]) || !isxdigit((unsigned char)r[2])) return false;
+            char hex[3] = { r[1], r[2], 0 };
+            *w++ = (char)strtol(hex, NULL, 16);
+            r += 3;
+        } else {
+            *w++ = *r++;
+        }
+    }
+    *w = 0;
+    return true;
+}
+
 static bool read_query_path(httpd_req_t *req, char *out, size_t max)
 {
     char qbuf[256];
     if (httpd_req_get_url_query_str(req, qbuf, sizeof(qbuf)) != ESP_OK) return false;
     if (httpd_query_key_value(qbuf, "path", out, max) != ESP_OK) return false;
+    if (!url_decode_in_place(out)) return false;
     return true;
 }
 
